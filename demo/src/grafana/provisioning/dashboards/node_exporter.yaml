@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: 'Node Exporter'
+    orgId: 1
+    folder: 'Node Exporter'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/node_exporter

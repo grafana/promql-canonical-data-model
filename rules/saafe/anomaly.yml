@@ -1,0 +1,101 @@
+groups:
+  - name: SAAFEAnomaly
+    rules:
+
+      ####################################################################################
+      #                        Canonical Data Model (cdm_metric)                        #
+      # Source-agnostic: identical rule definitions regardless of which source (OTel      #
+      # spanmetrics, Envoy, ...) enriched its series with cdm_metric="requests_total" /   #
+      # "request_duration" -- __name__ stays each source's own metric name, queried by    #
+      # label instead. These three rules are still recording rules -- that's the         #
+      # anomaly-detection framework's own input contract (it needs metrics tagged        #
+      # anomaly_name/anomaly_type, which only a recording rule's `labels:` can attach) --  #
+      # but they query the enriched raw metrics directly, with no separate aggregation    #
+      # layer sitting in between.                                                        #
+      #                                                                                  #
+      # Scoped to cdm_direction="inbound" (anomaly detection on a service's own load,     #
+      # not the calls it makes out). Grouped by cdm_source, not filtered to one -- the    #
+      # same underlying call can be reported by both spanmetrics and native OTel RPC      #
+      # instrumentation at once (see model/README.md), so summing across sources would    #
+      # double-count. Grouping keeps each source's numerator/denominator together         #
+      # instead: no double-counting, no arbitrary "preferred source", and it works for    #
+      # any number of sources with no explicit ordering. A service with two sources       #
+      # reporting inbound traffic gets two independent anomaly baselines, one per         #
+      # source -- more informative than picking one and hiding the other.                 #
+      ####################################################################################
+
+    - record: anomaly:request:rate5m
+      expr: sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
+      labels:
+        anomaly_name: "canonical_requests"
+        anomaly_type: "requests"
+        anomaly_strategy: "robust"
+
+    - record: anomaly:request:error_ratio
+      expr: |-
+        sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
+        /
+        sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
+      labels:
+        anomaly_name: "canonical_error_ratio"
+        anomaly_type: "errors"
+        anomaly_strategy: "robust"
+
+    - record: anomaly:request:latency:p95
+      # Normalized to seconds at query time, same ms/1000-or-s technique as the
+      # Canonical Data Model dashboard's latency panels (see model/README.md) --
+      # grouping by `le` alone across mixed cdm_unit values would silently produce
+      # a nonsense quantile.
+      expr: |-
+        (histogram_quantile(0.95, sum by (service, cdm_source, le) (rate({cdm_metric="request_duration", cdm_direction="inbound", le=~".+", cdm_unit="ms"}[5m]))) / 1000)
+        or
+        (histogram_quantile(0.95, sum by (service, cdm_source, le) (rate({cdm_metric="request_duration", cdm_direction="inbound", le=~".+", cdm_unit="s"}[5m]))))
+      labels:
+        anomaly_name: "canonical_latency_p95"
+        anomaly_type: "latency"
+        anomaly_strategy: "robust"
+
+      ####################################################################################
+      #                               Node Exporter                                      #
+      # Single-source in this demo -- queried directly, same as upstream saafe-model.     #
+      ####################################################################################
+
+    - record: anomaly:resource:cpu
+      expr: |-
+        (((count by (instance, job) (count(node_cpu_seconds_total{job=~"node_exporter"}) by (cpu, instance, job)))
+        -
+        avg by (instance, job) (sum by (instance, mode, job)(irate(node_cpu_seconds_total{mode='idle',job=~"node_exporter"}[5m])))) * 100)
+        /
+        count by(instance, job) (count(node_cpu_seconds_total{job=~"node_exporter"}) by (cpu, instance, job))
+      labels:
+        anomaly_name: "node_cpu"
+        anomaly_type: "resource"
+        anomaly_strategy: "robust"
+
+    - record: anomaly:resource:memory
+      expr: |-
+        100 -
+        (
+          avg by (instance, job) (node_memory_MemAvailable_bytes{job=~"node_exporter"}) /
+          avg by (instance, job) (node_memory_MemTotal_bytes{job=~"node_exporter"})
+        * 100
+        )
+      labels:
+        anomaly_name: "node_memory"
+        anomaly_type: "resource"
+        anomaly_strategy: "robust"
+
+      ################################################################
+      #                        Alerts                                #
+      ################################################################
+
+    - alert: AnomalyDetected
+      for: 5m
+      expr: >
+        last_over_time(anomaly:level[2m]) < last_over_time(anomaly:lower_band[2m])
+        or
+        last_over_time(anomaly:level[2m]) > last_over_time(anomaly:upper_band[2m])
+      labels:
+        severity: warning
+        saafe_severity: warning
+        saafe_category: anomaly

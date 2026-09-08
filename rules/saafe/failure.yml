@@ -1,0 +1,31 @@
+groups:
+  - name: SAAFEFailure
+    rules:
+
+      # Reference: https://www.robustperception.io/alerting-on-gauges-in-prometheus-2-0
+    - alert: InstanceDown
+      expr: (avg_over_time(up[5m]) < 0.8)
+      labels:
+        severity: critical
+        saafe_severity: critical
+        saafe_category: failure
+
+    - alert: OOMKillsDetectedOnNode
+      expr: rate(node_vmstat_oom_kill[1h]) * 3600 > 2
+      labels:
+        severity: warning
+        saafe_severity: warning
+        saafe_category: failure
+      annotations:
+        summary: "{{ $labels.value }} OOM Kills detected on Node {{ $labels.instance }} in last 1 hour"
+
+    - alert: "InstanceRestarted"
+      expr: |-
+        resets(process_uptime_seconds[5m]) > 0
+        or resets(otelcol_process_uptime_total[5m]) > 0
+        or resets(redis_uptime_seconds_total[5m]) > 0
+      labels:
+        severity: warning
+        saafe_severity: warning
+        saafe_category: failure
+

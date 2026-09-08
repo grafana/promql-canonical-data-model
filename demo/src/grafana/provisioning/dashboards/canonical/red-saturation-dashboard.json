@@ -1,0 +1,1195 @@
+{
+  "title": "Canonical Data Model — RED",
+  "description": "Generic RED (request rate / errors / duration) for one selected service, source, and direction at a time. $source forces picking exactly one source type (spanmetrics / otel_semconv / envoy / node_exporter / grafana) rather than 'All': the same underlying gRPC call can be reported by both the spanmetrics connector and native OTel RPC instrumentation simultaneously, so mixing sources risks double-counting the same request, the same class of issue as the frontend's overlapping GET/GET-with-route spans. The three RED panels in each row are aggregated (grouped by service/source only, no per-operation breakdown); a separate panel below each row breaks the same traffic down by operation (inbound, via $operation) or destination (outbound), both cdm_request_context, with cdm_request_type shown alongside it in the legend rather than as a separate filter. All three inbound panels overlay the anomaly-detection framework's bands and insights (as in the Anomalies dashboards), computed by rules/saafe/anomaly.yml's canonical_requests/canonical_error_ratio/canonical_latency_p95 rules -- generic across sources via group-by (service, cdm_source), not a filter on one. Latency shows p95 only, matching the anomaly rule it's overlaid with, normalized to seconds at query time: cdm_unit can't be converted by relabeling (rescaling a histogram bucket boundary needs arithmetic, not a label rewrite), so the panel computes the quantile separately per cdm_unit and scales the ms branch before combining -- the anomaly rule does the same. Requests/errors/duration are computed inline directly from series enriched with cdm_metric=\"requests_total\"/\"request_duration\" (no recording-rule layer for the canonical model itself, __name__ stays each source's own metric name). Node-level saturation lives in the separate Node Exporter dashboard, not here: this model has no label connecting a service to the node it runs on. Note: request_type=\"internal\" series (no clear inbound/outbound side) don't appear in either row by design. A final Insights row (same state-timeline pattern as the Assertions dashboard) shows firing SAAFE alerts scoped to the selected $service, across all sources.",
+  "uid": "cdm-red-saturation",
+  "schemaVersion": 40,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "timezone": "browser",
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "tags": [
+    "canonical-data-model",
+    "red"
+  ],
+  "links": [],
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Inbound RED — requests this service receives",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Request rate",
+      "description": "Aggregated across operations. Shaded band and dashed \"level\" line are the robust anomaly-detection strategy's baseline for this exact query (rules/saafe/anomaly.yml, anomaly_name=\"canonical_requests\"); a filled marker under \"anomalies\" means AnomalyDetected fired.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))",
+          "legendFormat": "request rate",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "legendFormat": "anomaly_lower_band",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "legendFormat": "anomaly_upper_band",
+          "range": true,
+          "instant": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "ALERTS{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "legendFormat": "anomalies",
+          "range": true,
+          "instant": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "anomaly:level{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\"}",
+          "legendFormat": "level",
+          "range": true,
+          "instant": false,
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomaly_upper_band"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "anomaly_lower_band"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0.1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomaly_lower_band"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0.1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomalies"
+            },
+            "properties": [
+              {
+                "id": "custom.fillOpacity",
+                "value": 16
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.axisSoftMin",
+                "value": 0
+              },
+              {
+                "id": "custom.axisSoftMax",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#686e67",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Error ratio",
+      "description": "Aggregated across operations. Shaded band and dashed \"level\" line are the robust anomaly-detection strategy's baseline for this exact query (rules/saafe/anomaly.yml, anomaly_name=\"canonical_error_ratio\"); a filled marker under \"anomalies\" means AnomalyDetected fired.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_status=\"error\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))\n/\nsum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))",
+          "legendFormat": "error ratio",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "legendFormat": "anomaly_lower_band",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "legendFormat": "anomaly_upper_band",
+          "range": true,
+          "instant": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "ALERTS{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "legendFormat": "anomalies",
+          "range": true,
+          "instant": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "anomaly:level{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\"}",
+          "legendFormat": "level",
+          "range": true,
+          "instant": false,
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomaly_upper_band"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "anomaly_lower_band"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0.1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomaly_lower_band"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0.1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomalies"
+            },
+            "properties": [
+              {
+                "id": "custom.fillOpacity",
+                "value": 16
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.axisSoftMin",
+                "value": 0
+              },
+              {
+                "id": "custom.axisSoftMax",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#686e67",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Latency p95",
+      "description": "Aggregated across operations. Shaded band and dashed \"level\" line are the robust anomaly-detection strategy's baseline for this exact p95 query (rules/saafe/anomaly.yml, anomaly_name=\"canonical_latency_p95\"); a filled marker under \"anomalies\" means AnomalyDetected fired.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"ms\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))) / 1000)\nor\n(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"s\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))))",
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "legendFormat": "anomaly_lower_band",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "legendFormat": "anomaly_upper_band",
+          "range": true,
+          "instant": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "ALERTS{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "legendFormat": "anomalies",
+          "range": true,
+          "instant": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "anomaly:level{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\"}",
+          "legendFormat": "level",
+          "range": true,
+          "instant": false,
+          "refId": "E"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomaly_upper_band"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "anomaly_lower_band"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0.1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomaly_lower_band"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0.1
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "anomalies"
+            },
+            "properties": [
+              {
+                "id": "custom.fillOpacity",
+                "value": 16
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.axisSoftMin",
+                "value": 0
+              },
+              {
+                "id": "custom.axisSoftMax",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "never"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#686e67",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Request rate by operation",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
+          "legendFormat": "{{cdm_request_context}} ({{cdm_request_type}})",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Outbound RED — requests this service makes to others",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Request rate",
+      "description": "Aggregated across destinations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))",
+          "legendFormat": "request rate",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Error ratio",
+      "description": "Aggregated across destinations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_status=\"error\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))\n/\nsum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))",
+          "legendFormat": "error ratio",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Latency p95",
+      "description": "Aggregated across destinations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 18
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"ms\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))) / 1000)\nor\n(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"s\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))))",
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Request rate by destination",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))",
+          "legendFormat": "{{cdm_request_context}} ({{cdm_request_type}})",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Insights — active SAAFE assertions using this data model",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      }
+    },
+    {
+      "id": 21,
+      "type": "state-timeline",
+      "title": "$service assertions",
+      "description": "Firing SAAFE alerts scoped to the selected service (same pattern as the Assertions dashboard's Timeline row), across all sources -- cdm_source is deliberately not filtered here: some alerts (VersionUpdated) aren't scoped to any source at all, and an alert with two active sources for this service shouldn't silently disappear just because one isn't the currently selected $source. Not a hardcoded alertname list: any alert whose series carries a service label matches, which today is HighErrorRate (rules/saafe/error.yml), AnomalyDetected (rules/saafe/anomaly.yml, only its canonical_requests/canonical_error_ratio/canonical_latency_p95 instances -- node_cpu/node_memory have no service label), and VersionUpdated (rules/saafe/amend.yml).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "webstore-metrics"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 64,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "links": [
+            {
+              "targetBlank": true,
+              "title": "Alert: ${__field.labels.alertname}",
+              "url": "http://localhost:8080/grafana/d/deydvei70rxtsb/alerts?from=now-24h&to=now&timezone=browser&var-alertname=${__field.labels.alertname}"
+            },
+            {
+              "targetBlank": true,
+              "title": "Anomaly baseline: ${__field.labels.anomaly_name}",
+              "url": "http://localhost:8080/grafana/d/eerotdnm1iarkc/anomalies-robust?from=now-2d&to=now&timezone=browser&var-anomaly_name=${__field.labels.anomaly_name}&var-anomaly_strategy=${__field.labels.anomaly_strategy}&refresh=10s"
+            }
+          ],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "semi-dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "showValue": "never",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (alertname, saafe_severity) (ALERTS{service=\"$service\", saafe_severity=\"info\", alertstate=\"firing\"})",
+          "legendFormat": "{{alertname}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (alertname, saafe_severity) (ALERTS{service=\"$service\", saafe_severity=\"warning\", alertstate=\"firing\"})",
+          "legendFormat": "{{alertname}}",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "webstore-metrics"
+          },
+          "editorMode": "code",
+          "expr": "sum by (alertname, saafe_severity) (ALERTS{service=\"$service\", saafe_severity=\"critical\", alertstate=\"firing\"})",
+          "legendFormat": "{{alertname}}",
+          "range": true,
+          "instant": false,
+          "refId": "C"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "webstore-metrics"
+        },
+        "definition": "label_values({cdm_metric=\"requests_total\"}, service)",
+        "query": {
+          "query": "label_values({cdm_metric=\"requests_total\"}, service)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "includeAll": false,
+        "multi": false,
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": [],
+        "refresh": 2,
+        "regex": "",
+        "sort": 1
+      },
+      {
+        "name": "operation",
+        "label": "operation",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "webstore-metrics"
+        },
+        "definition": "label_values({cdm_metric=\"requests_total\", service=~\"$service\", cdm_direction=\"inbound\"}, cdm_request_context)",
+        "query": {
+          "query": "label_values({cdm_metric=\"requests_total\", service=~\"$service\", cdm_direction=\"inbound\"}, cdm_request_context)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "refresh": 2,
+        "regex": "",
+        "sort": 1
+      },
+      {
+        "name": "source",
+        "label": "source",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "webstore-metrics"
+        },
+        "definition": "label_values({cdm_source=~\".+\", service=\"$service\"}, cdm_source)",
+        "query": {
+          "query": "label_values({cdm_source=~\".+\", service=\"$service\"}, cdm_source)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "includeAll": false,
+        "multi": false,
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": [],
+        "refresh": 2,
+        "regex": "",
+        "sort": 1
+      }
+    ]
+  }
+}

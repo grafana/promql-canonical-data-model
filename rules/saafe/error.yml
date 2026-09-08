@@ -1,0 +1,31 @@
+groups:
+  - name: SAAFEError
+    rules:
+
+      ####################################################################################
+      #                        Canonical Data Model (cdm_metric)                        #
+      # Source-agnostic: fires identically whether the underlying series came from OTel   #
+      # spanmetrics, Envoy admin stats, or any other source enriched with                 #
+      # cdm_metric="requests_total" -- a name-less selector, __name__ itself is           #
+      # whatever each source's own metric is called. Computed inline (no recording-rule   #
+      # layer), so the canonical model adds zero series beyond the enriched originals.     #
+      #                                                                                  #
+      # Scoped to cdm_direction="inbound", grouped (not filtered) by cdm_source for the   #
+      # same reason as rules/saafe/anomaly.yml: the same call can be reported by both     #
+      # spanmetrics and native OTel RPC instrumentation at once, so summing across        #
+      # sources would double-count -- but filtering to one specific source would need an  #
+      # arbitrary "preferred source" choice. Grouping by cdm_source instead keeps each     #
+      # source's numerator and denominator together, generically, for any source.         #
+      ####################################################################################
+
+    - alert: HighErrorRate
+      expr: |-
+        (sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
+        /
+        sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m])))
+        > 0.05
+      for: 10m
+      labels:
+        severity: critical
+        saafe_severity: critical
+        saafe_category: error

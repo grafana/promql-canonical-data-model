@@ -1,0 +1,298 @@
+# SPDX-License-Identifier: Apache-2.0
+# Provenance-includes-location: https://github.com/open-telemetry/opentelemetry-demo/blob/main/src/prometheus/prometheus-config.yaml
+# Provenance-includes-license: Apache-2.0
+# Provenance-includes-copyright: The OpenTelemetry Authors.
+# Modifications [Grafana Labs]:
+# - Scrape Prometheus's own metrics
+# - Add extra rule files
+# - Canonical Data Model: scrape the collector's combined metrics endpoint
+#   (spanmetrics, docker_stats, redis, httpcheck), node_exporter directly, Envoy's
+#   admin stats endpoint, and Grafana's own /metrics, each with metric_relabel_configs
+#   enriching the source-specific series with the canonical labels defined in
+#   model/schema.json. See model/README.md for the label reference and the reasoning
+#   behind each rule below. Hand-maintained: there's no generator, this is the real
+#   config.
+
+global:
+  evaluation_interval: 30s
+  scrape_interval: 5s
+storage:
+  tsdb:
+    out_of_order_time_window: 30m
+scrape_configs:
+- job_name: otel-collector
+  static_configs:
+  - targets:
+    - 'otelcol:8888'
+- job_name: prometheus
+  static_configs:
+  - targets:
+    - localhost:9090 # prometheus endpoint address
+  metrics_path: /prometheus/metrics
+- job_name: otelcol-metrics
+  static_configs:
+  - targets:
+    - 'otelcol:9464'
+  metric_relabel_configs:
+  # ---- Canonical Data Model: OTel spanmetrics -----------------------------------
+  # This endpoint also carries docker_stats/redis/httpcheck/self-telemetry series, which
+  # have no `service_name` label — every rule below is gated on `service_name` being
+  # non-empty, so it only ever fires on spanmetrics-connector output and is a no-op
+  # (sample passes through unchanged) for everything else sharing this endpoint.
+  - source_labels: [service_name]
+    regex: '(.+)'
+    target_label: service
+    replacement: '${1}'
+  # cdm_source: which relabeling section (source type) produced this series -- one
+  # value per section in this file, so it's queryable/selectable instead of only
+  # living in a comment.
+  - source_labels: [service_name]
+    regex: '.+'
+    target_label: cdm_source
+    replacement: spanmetrics
+  # The connector's duration histogram is milliseconds by default and is left that way
+  # (see otelcol-config.yml) — cdm_unit records it rather than converting it, since
+  # relabeling can rewrite labels but never a sample's value.
+  - source_labels: [service_name]
+    regex: '.+'
+    target_label: cdm_unit
+    replacement: ms
+  # cdm_request_type: default to internal, then override with progressively more
+  # specific signals (later rules win when they match) — db < http < rpc.
+  - source_labels: [service_name]
+    regex: '.+'
+    target_label: cdm_request_type
+    replacement: internal
+  - source_labels: [service_name, db_system]
+    regex: '.+;.+'
+    target_label: cdm_request_type
+    replacement: db
+  - source_labels: [service_name, http_method, http_request_method]
+    regex: '.+;(?:.+;.*|.*;.+)'
+    target_label: cdm_request_type
+    replacement: http
+  - source_labels: [service_name, rpc_system]
+    regex: '.+;.+'
+    target_label: cdm_request_type
+    replacement: rpc
+  # cdm_request_context: default to span_name, then override with a more specific
+  # operation identifier when one is present (db_operation, then http_route).
+  - source_labels: [service_name, span_name]
+    regex: '.+;(.+)'
+    target_label: cdm_request_context
+    replacement: '${1}'
+  - source_labels: [service_name, db_operation]
+    regex: '.+;(.+)'
+    target_label: cdm_request_context
+    replacement: '${1}'
+  - source_labels: [service_name, http_route]
+    regex: '.+;(.+)'
+    target_label: cdm_request_context
+    replacement: '${1}'
+  # cdm_direction: from span.kind — which side of the call this series represents,
+  # so summing across a service doesn't double-count both ends of the same call.
+  - source_labels: [service_name, span_kind]
+    regex: '.+;SPAN_KIND_(?:SERVER|CONSUMER)'
+    target_label: cdm_direction
+    replacement: inbound
+  - source_labels: [service_name, span_kind]
+    regex: '.+;SPAN_KIND_(?:CLIENT|PRODUCER)'
+    target_label: cdm_direction
+    replacement: outbound
+  # cdm_status: collapse the OTel span status into ok/error.
+  - source_labels: [service_name, status_code]
+    regex: '.+;STATUS_CODE_ERROR'
+    target_label: cdm_status
+    replacement: error
+  - source_labels: [service_name, status_code]
+    regex: '.+;(?:STATUS_CODE_OK|STATUS_CODE_UNSET)'
+    target_label: cdm_status
+    replacement: ok
+  # cdm_metric: the queryable canonical identity, in place of a renamed __name__ (which
+  # stays exactly as the connector emits it). One shared value for bucket/sum/count:
+  # histogram_quantile() keys off the `le` label's presence, not the metric name.
+  - source_labels: [__name__]
+    regex: 'traces_span_metrics_calls_total'
+    target_label: cdm_metric
+    replacement: requests_total
+  - source_labels: [__name__]
+    regex: 'traces_span_metrics_duration_milliseconds_(?:bucket|sum|count)'
+    target_label: cdm_metric
+    replacement: request_duration
+  # ---- Canonical Data Model: OTel RPC semantic-convention metrics ----------------
+  # A third, genuinely different source type on this same endpoint: metrics emitted
+  # directly by OTel RPC client/server instrumentation (rpc_client_duration_milliseconds
+  # / rpc_server_duration_milliseconds -- confirmed present from both a Java and a Go
+  # SDK in this demo), not derived from spans via the spanmetrics connector. Same
+  # cdm_* labels, same generic pattern -- a real example of why the canonical model
+  # is defined once, independent of any one source (see model/schema.json).
+  #
+  # Guarded on `service_name` being *empty* and `rpc_system` non-empty: these metrics
+  # share this endpoint with spanmetrics (which also carries service_name, and can
+  # itself carry an rpc_system dimension -- see otelcol-config.yml -- so rpc_system
+  # alone isn't a safe guard). exported_job is used instead of spanmetrics' service_name
+  # for the service label because this metric family doesn't carry service.name as a
+  # promoted attribute the way spanmetrics-connector output does, only the OTel
+  # resource-derived job (service.namespace/service.name, renamed to exported_job by
+  # Prometheus since our own scrape job is also literally named "job").
+  - source_labels: [service_name, exported_job]
+    regex: ';[^/]+/(.+)'
+    target_label: service
+    replacement: '${1}'
+  - source_labels: [service_name, rpc_system]
+    regex: ';.+'
+    target_label: cdm_source
+    replacement: otel_semconv
+  - source_labels: [service_name, rpc_system]
+    regex: ';.+'
+    target_label: cdm_unit
+    replacement: ms
+  - source_labels: [service_name, rpc_system]
+    regex: ';.+'
+    target_label: cdm_request_type
+    replacement: rpc
+  - source_labels: [service_name, rpc_service, rpc_method]
+    regex: ';(.+);(.+)'
+    target_label: cdm_request_context
+    replacement: '${1}/${2}'
+  - source_labels: [service_name, __name__]
+    regex: ';rpc_client_.*'
+    target_label: cdm_direction
+    replacement: outbound
+  - source_labels: [service_name, __name__]
+    regex: ';rpc_server_.*'
+    target_label: cdm_direction
+    replacement: inbound
+  # rpc_grpc_status_code only classifies gRPC; other rpc_system values (e.g. a future
+  # JSON-RPC source) would need their own status mapping added here.
+  - source_labels: [service_name, rpc_grpc_status_code]
+    regex: ';0'
+    target_label: cdm_status
+    replacement: ok
+  - source_labels: [service_name, rpc_grpc_status_code]
+    regex: ';[1-9][0-9]*'
+    target_label: cdm_status
+    replacement: error
+  # Unlike spanmetrics/Envoy, this source has no dedicated "calls" counter -- the
+  # histogram's own _count series *is* the request count (histogram_quantile only
+  # ever reads _bucket, so retagging _count doesn't affect the quantile panels).
+  - source_labels: [__name__]
+    regex: 'rpc_(?:client|server)_duration_milliseconds_count'
+    target_label: cdm_metric
+    replacement: requests_total
+  - source_labels: [__name__]
+    regex: 'rpc_(?:client|server)_duration_milliseconds_(?:bucket|sum)'
+    target_label: cdm_metric
+    replacement: request_duration
+- job_name: node_exporter
+  static_configs:
+  - targets:
+    - 'node_exporter:9100'
+  metric_relabel_configs:
+  # ---- Canonical Data Model: node_exporter ---------------------------------------
+  # It's the only node-level source in this demo, so there's nothing to unify across
+  # sources here (unlike requests/errors, spanmetrics vs. Envoy) — this just tags
+  # entity level for dashboard classification.
+  - target_label: cdm_entity_type
+    replacement: node
+  - target_label: cdm_source
+    replacement: node_exporter
+- job_name: envoy
+  metrics_path: /stats/prometheus
+  static_configs:
+  - targets:
+    - 'frontendproxy:10000'
+  metric_relabel_configs:
+  # ---- Canonical Data Model: Envoy admin stats -----------------------------------
+  # A genuinely different naming convention (service-mesh-adjacent), demonstrating the
+  # heterogeneity story. Applies unconditionally: this job only ever scrapes Envoy.
+  #
+  # service is derived from `instance` (the scrape target's own host), not hardcoded --
+  # this is a generic rule for "the Envoy admin-stats source type", not a fact specific
+  # to this one deployment. Any Envoy target scraped this way gets its own `service`.
+  - source_labels: [instance]
+    regex: '([^:]+):.*'
+    target_label: service
+    replacement: '${1}'
+  - target_label: cdm_source
+    replacement: envoy
+  - target_label: cdm_request_type
+    replacement: http
+  - target_label: cdm_direction
+    replacement: outbound
+  - target_label: cdm_unit
+    replacement: ms
+  - source_labels: [envoy_cluster_name]
+    regex: '(.+)'
+    target_label: cdm_request_context
+    replacement: '${1}'
+  - source_labels: [envoy_response_code_class]
+    regex: '[45]'
+    target_label: cdm_status
+    replacement: error
+  - source_labels: [envoy_response_code_class]
+    regex: '[23]'
+    target_label: cdm_status
+    replacement: ok
+  - source_labels: [__name__]
+    regex: 'envoy_cluster_upstream_rq_xx'
+    target_label: cdm_metric
+    replacement: requests_total
+  - source_labels: [__name__]
+    regex: 'envoy_cluster_upstream_rq_time_(?:bucket|count|sum)'
+    target_label: cdm_metric
+    replacement: request_duration
+- job_name: grafana
+  metrics_path: /grafana/metrics
+  static_configs:
+  - targets:
+    - 'grafana:3000'
+  metric_relabel_configs:
+  # ---- Canonical Data Model: Grafana's own HTTP metrics --------------------------
+  # A fifth, genuinely different naming convention: classic Prometheus client-library
+  # instrumentation, not OTel-derived at all -- no resource attributes, no
+  # service_name/service label of its own to promote. Applies unconditionally: this
+  # job only ever scrapes Grafana. Even the observability stack's own tooling needs
+  # canonicalizing, not just the application services.
+  #
+  # service is derived from `instance` (the scrape target's own host), same generic
+  # technique as the Envoy job -- not hardcoded, so it works for any Grafana instance
+  # scraped this way.
+  - source_labels: [instance]
+    regex: '([^:]+):.*'
+    target_label: service
+    replacement: '${1}'
+  - target_label: cdm_source
+    replacement: grafana
+  - target_label: cdm_request_type
+    replacement: http
+  - target_label: cdm_direction
+    replacement: inbound
+  # Already native seconds, unlike spanmetrics/otel_semconv/envoy (all ms) -- cdm_unit
+  # records what's true rather than forcing a single convention.
+  - target_label: cdm_unit
+    replacement: s
+  - source_labels: [handler]
+    regex: '(.+)'
+    target_label: cdm_request_context
+    replacement: '${1}'
+  - source_labels: [status_code]
+    regex: '[45]\d\d'
+    target_label: cdm_status
+    replacement: error
+  - source_labels: [status_code]
+    regex: '[23]\d\d'
+    target_label: cdm_status
+    replacement: ok
+  - source_labels: [__name__]
+    regex: 'grafana_http_request_duration_seconds_count'
+    target_label: cdm_metric
+    replacement: requests_total
+  - source_labels: [__name__]
+    regex: 'grafana_http_request_duration_seconds_(?:bucket|sum)'
+    target_label: cdm_metric
+    replacement: request_duration
+
+rule_files:
+- /etc/prometheus/rules/anomaly/*.yml
+- /etc/prometheus/rules/saafe/*.yml

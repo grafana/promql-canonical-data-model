@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+# Provenance-includes-location: https://github.com/open-telemetry/opentelemetry-demo/blob/main/src/otelcollector/otelcol-config.yml
+# Provenance-includes-license: Apache-2.0
+# Provenance-includes-copyright: The OpenTelemetry Authors.
+# Modifications [Grafana Labs]:
+# - Removed unnecessary parts for the purposes of this demo
+# - Canonical Data Model: expose metrics via a `prometheus` scrape endpoint instead of
+#   pushing OTLP, so Prometheus can apply metric_relabel_configs (push ingestion has no
+#   relabeling stage in Prometheus at all). node_exporter is now scraped by Prometheus
+#   directly, so the collector's internal `prometheus` receiver (which used to scrape
+#   both node_exporter and the collector's own :8888 self-telemetry) is removed to avoid
+#   a redundant double-hop.
+# - spanmetrics connector: project HTTP/RPC semantic-convention span attributes
+#   (old and new semconv generations, since the demo mixes SDKs/languages/versions)
+#   as dimensions, so the canonical relabeling rules have something to map from.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: ${env:OTEL_COLLECTOR_HOST}:${env:OTEL_COLLECTOR_PORT_GRPC}
+      http:
+        endpoint: ${env:OTEL_COLLECTOR_HOST}:${env:OTEL_COLLECTOR_PORT_HTTP}
+        cors:
+          allowed_origins:
+            - "http://*"
+            - "https://*"
+  httpcheck/frontendproxy:
+    targets:
+      - endpoint: http://frontendproxy:${env:ENVOY_PORT}
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+  redis:
+    endpoint: "valkey-cart:6379"
+    username: "valkey"
+    collection_interval: 10s
+
+exporters:
+  debug:
+  prometheus:
+    endpoint: "0.0.0.0:9464"
+
+processors:
+  batch:
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # could be removed when https://github.com/vercel/next.js/pull/64852 is fixed upstream
+          - replace_pattern(name, "\\?.*", "")
+          - replace_match(name, "GET /api/products/*", "GET /api/products/{productId}")
+
+connectors:
+  spanmetrics:
+    # Deliberately left at the connector's default (ms), not converted to seconds here.
+    # Different sources report duration in different units (this one in ms, a future
+    # seconds-native source, ...) and relabeling can't convert a sample's value, only
+    # its labels/name — so the canonical model tags the unit as a label (cdm_unit)
+    # instead of forcing a single unit at the source. See model/README.md.
+    dimensions:
+      # HTTP semantic conventions (old and new generations)
+      - name: http.method
+      - name: http.request.method
+      - name: http.route
+      - name: http.status_code
+      - name: http.response.status_code
+      # RPC/gRPC semantic conventions
+      - name: rpc.system
+      - name: rpc.service
+      - name: rpc.method
+      - name: rpc.grpc.status_code
+      # Database semantic conventions
+      - name: db.system
+      - name: db.operation
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform, batch]
+      exporters: [debug, spanmetrics]
+    metrics:
+      receivers: [docker_stats, httpcheck/frontendproxy, otlp, redis, spanmetrics]
+      processors: [batch]
+      exporters: [prometheus, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "0.0.0.0"
+                port: 8888
