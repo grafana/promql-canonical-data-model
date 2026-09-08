@@ -958,7 +958,7 @@
       "id": 21,
       "type": "state-timeline",
       "title": "$service assertions",
-      "description": "Firing SAAFE alerts scoped to the selected service (same pattern as the Assertions dashboard's Timeline row), across all sources -- cdm_source is deliberately not filtered here: some alerts (VersionUpdated) aren't scoped to any source at all, and an alert with two active sources for this service shouldn't silently disappear just because one isn't the currently selected $source. Not a hardcoded alertname list: any alert whose series carries a service label matches, which today is HighErrorRate (rules/saafe/error.yml), AnomalyDetected (rules/saafe/anomaly.yml, only its canonical_requests/canonical_error_ratio/canonical_latency_p95 instances -- node_cpu/node_memory have no service label), and VersionUpdated (rules/saafe/amend.yml).",
+      "description": "Firing SAAFE alerts scoped to the selected service (same pattern as the Assertions dashboard's Timeline row), across all sources -- cdm_source is deliberately not filtered here: some alerts (VersionUpdated) aren't scoped to any source at all, and an alert with two active sources for this service shouldn't silently disappear just because one isn't the currently selected $source. Not a hardcoded alertname list: any alert whose series carries a service label matches, which today is HighErrorRate (rules/saafe/error.yml), AnomalyDetected (rules/saafe/anomaly.yml, only its canonical_requests/canonical_error_ratio/canonical_latency_p95 instances -- node_cpu/node_memory have no service label), and VersionUpdated (rules/saafe/amend.yml). Queries ALERTS directly with no sum by(...) wrapper: several alerts can legitimately fire more than once concurrently under the same alertname, distinguished only by a label an aggregation would otherwise discard (HighErrorRate by cdm_source, AnomalyDetected by anomaly_name, VersionUpdated by saafe_version_type/saafe_source) -- aggregating would silently sum those into one row with value 2+, breaking the \"1\" -> \"firing\" mapping and hiding that two independent things are happening. Unaggregated, every concurrent instance gets its own row and is always exactly 1.",
       "datasource": {
         "type": "prometheus",
         "uid": "webstore-metrics"
@@ -997,7 +997,16 @@
               "url": "http://localhost:8080/grafana/d/eerotdnm1iarkc/anomalies-robust?from=now-2d&to=now&timezone=browser&var-anomaly_name=${__field.labels.anomaly_name}&var-anomaly_strategy=${__field.labels.anomaly_strategy}&refresh=10s"
             }
           ],
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "firing"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1079,7 +1088,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (alertname, saafe_severity) (ALERTS{service=\"$service\", saafe_severity=\"info\", alertstate=\"firing\"})",
+          "expr": "ALERTS{service=\"$service\", saafe_severity=\"info\", alertstate=\"firing\"}",
           "legendFormat": "{{alertname}}",
           "range": true,
           "instant": false,
@@ -1091,7 +1100,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (alertname, saafe_severity) (ALERTS{service=\"$service\", saafe_severity=\"warning\", alertstate=\"firing\"})",
+          "expr": "ALERTS{service=\"$service\", saafe_severity=\"warning\", alertstate=\"firing\"}",
           "legendFormat": "{{alertname}}",
           "range": true,
           "instant": false,
@@ -1103,7 +1112,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (alertname, saafe_severity) (ALERTS{service=\"$service\", saafe_severity=\"critical\", alertstate=\"firing\"})",
+          "expr": "ALERTS{service=\"$service\", saafe_severity=\"critical\", alertstate=\"firing\"}",
           "legendFormat": "{{alertname}}",
           "range": true,
           "instant": false,
