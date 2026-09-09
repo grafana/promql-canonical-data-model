@@ -2,27 +2,27 @@ groups:
   - name: SAAFEAnomaly
     rules:
 
-      ####################################################################################
-      #                        Canonical Data Model (cdm_metric)                        #
-      # Source-agnostic: identical rule definitions regardless of which source (OTel      #
-      # spanmetrics, Envoy, ...) enriched its series with cdm_metric="requests_total" /   #
-      # "request_duration" -- __name__ stays each source's own metric name, queried by    #
-      # label instead. These three rules are still recording rules -- that's the         #
-      # anomaly-detection framework's own input contract (it needs metrics tagged        #
+      ######################################################################################
+      #                         Canonical Data Model (cdm_metric)                          #
+      # Source-agnostic: identical rule definitions regardless of which source (OTel       #
+      # spanmetrics, Envoy, ...) enriched its series with cdm_metric="requests_total" /    #
+      # "request_duration" -- __name__ stays each source's own metric name, queried by     #
+      # label instead. These three rules are still recording rules -- that's the           #
+      # anomaly-detection framework's own input contract (it needs metrics tagged          #
       # anomaly_name/anomaly_type, which only a recording rule's `labels:` can attach) --  #
-      # but they query the enriched raw metrics directly, with no separate aggregation    #
-      # layer sitting in between.                                                        #
-      #                                                                                  #
-      # Scoped to cdm_direction="inbound" (anomaly detection on a service's own load,     #
-      # not the calls it makes out). Grouped by cdm_source, not filtered to one -- the    #
-      # same underlying call can be reported by both spanmetrics and native OTel RPC      #
-      # instrumentation at once (see model/README.md), so summing across sources would    #
-      # double-count. Grouping keeps each source's numerator/denominator together         #
-      # instead: no double-counting, no arbitrary "preferred source", and it works for    #
-      # any number of sources with no explicit ordering. A service with two sources       #
-      # reporting inbound traffic gets two independent anomaly baselines, one per         #
-      # source -- more informative than picking one and hiding the other.                 #
-      ####################################################################################
+      # but they query the enriched raw metrics directly, with no separate aggregation     #
+      # layer sitting in between.                                                          #
+      #                                                                                    #
+      # Scoped to cdm_direction="inbound" (anomaly detection on a service's own load,      #
+      # not the calls it makes out). Grouped by cdm_source, not filtered to one -- the     #
+      # same underlying call can be reported by both spanmetrics and native OTel RPC       #
+      # instrumentation at once (see model/README.md), so summing across sources would     #
+      # double-count. Grouping keeps each source's numerator/denominator together          #
+      # instead: no double-counting, no arbitrary "preferred source", and it works for     #
+      # any number of sources with no explicit ordering. A service with two sources        #
+      # reporting inbound traffic gets two independent anomaly baselines, one per          #
+      # source -- more informative than picking one and hiding the other.                  #
+      ######################################################################################
 
     - record: anomaly:request:rate5m
       expr: sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
@@ -55,10 +55,10 @@ groups:
         anomaly_type: "latency"
         anomaly_strategy: "robust"
 
-      ####################################################################################
-      #                               Node Exporter                                      #
-      # Single-source in this demo -- queried directly, same as upstream saafe-model.     #
-      ####################################################################################
+      ###################################################################################
+      #                                  Node Exporter                                  #
+      # Single-source in this demo -- queried directly, same as upstream saafe-model.   #
+      ###################################################################################
 
     - record: anomaly:resource:cpu
       expr: |-
