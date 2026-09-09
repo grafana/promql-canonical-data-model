@@ -19,8 +19,8 @@ Canonical identity is carried by a new label, `cdm_metric`, instead:
 | `requests_total` | One request/call, however the source defines "a call" (a completed span, a proxied HTTP request, ...) |
 | `request_duration` | How long a request took |
 
-Query it with a name-less selector — `{cdm_metric="requests_total", service=~"..."}` —
-the same querying style asserts-adi uses. This was a deliberate choice over renaming
+Query it with a name-less selector — `{cdm_metric="requests_total", service=~"..."}`.
+This was a deliberate choice over renaming
 `__name__` to something like `cdm_requests_total`: renaming is a destructive
 transformation (the source's own metric name is gone, unrecoverable, and two sources
 could collide into an identical labelset), whereas tagging `cdm_metric` is purely
@@ -77,10 +77,10 @@ gaps"). It's tagged `cdm_entity_type: node` for dashboard classification only.
 
 This is deliberately a small, OTel-semantic-convention-first set (see the root README's
 talk context). It does **not** yet include things like entity-relationship/service-graph
-edges or asserts-adi-style rootcause/entity-graph labels — those are real, useful ideas,
-but adding them before the OTel-native layer is solid would be designing in the wrong
-order. They're natural extensions once you need them for your own organization, not
-because the demo needs to prove it can do everything at once.
+edges or rootcause/entity-graph labels — those are real, useful ideas, but adding them
+before the OTel-native layer is solid would be designing in the wrong order. They're
+natural extensions once you need them for your own organization, not because the demo
+needs to prove it can do everything at once.
 
 ## Schema vs. mapping — two separate things on purpose
 
