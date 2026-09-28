@@ -5,13 +5,8 @@
 # Modifications [Grafana Labs]:
 # - Scrape Prometheus's own metrics
 # - Add extra rule files
-# - Canonical Data Model: scrape the collector's combined metrics endpoint
-#   (spanmetrics, docker_stats, redis, httpcheck), node_exporter directly, Envoy's
-#   admin stats endpoint, and Grafana's own /metrics, each with metric_relabel_configs
-#   enriching the source-specific series with the canonical labels defined in
-#   model/schema.json. See model/README.md for the label reference and the reasoning
-#   behind each rule below. Hand-maintained: there's no generator, this is the real
-#   config.
+# - Canonical Data Model: metric_relabel_configs/receive_relabel_configs enrich
+#   sources with the canonical labels in model/schema.json -- see model/README.md.
 
 global:
   evaluation_interval: 30s
@@ -19,6 +14,157 @@ global:
 storage:
   tsdb:
     out_of_order_time_window: 30m
+# ---- Canonical Data Model: OTel spanmetrics -----------------------------------
+# This pipeline also carries docker_stats/redis/httpcheck/self-telemetry series, which
+# have no `service_name` label — every rule below is gated on `service_name` being
+# non-empty, so it only ever fires on spanmetrics-connector output and is a no-op
+# (sample passes through unchanged) for everything else sharing this pipeline.
+receive_relabel_configs:
+- source_labels: [service_name]
+  regex: '(.+)'
+  target_label: service
+  replacement: '${1}'
+# cdm_source: which relabeling section (source type) produced this series -- one
+# value per section in this file, so it's queryable/selectable instead of only
+# living in a comment.
+- source_labels: [service_name]
+  regex: '.+'
+  target_label: cdm_source
+  replacement: spanmetrics
+# The connector's duration histogram is milliseconds by default and is left that way
+# (see otelcol-config.yml) — cdm_unit records it rather than converting it, since
+# relabeling can rewrite labels but never a sample's value.
+- source_labels: [service_name]
+  regex: '.+'
+  target_label: cdm_unit
+  replacement: ms
+# cdm_request_type: default to internal, then override with progressively more
+# specific signals (later rules win when they match) — db < http < rpc.
+- source_labels: [service_name]
+  regex: '.+'
+  target_label: cdm_request_type
+  replacement: internal
+- source_labels: [service_name, db_system]
+  regex: '.+;.+'
+  target_label: cdm_request_type
+  replacement: db
+- source_labels: [service_name, http_method, http_request_method]
+  regex: '.+;(?:.+;.*|.*;.+)'
+  target_label: cdm_request_type
+  replacement: http
+- source_labels: [service_name, rpc_system]
+  regex: '.+;.+'
+  target_label: cdm_request_type
+  replacement: rpc
+# cdm_request_context: default to span_name, then override with a more specific
+# operation identifier when one is present (db_operation, then http_route).
+- source_labels: [service_name, span_name]
+  regex: '.+;(.+)'
+  target_label: cdm_request_context
+  replacement: '${1}'
+- source_labels: [service_name, db_operation]
+  regex: '.+;(.+)'
+  target_label: cdm_request_context
+  replacement: '${1}'
+- source_labels: [service_name, http_route]
+  regex: '.+;(.+)'
+  target_label: cdm_request_context
+  replacement: '${1}'
+# cdm_direction: from span.kind — which side of the call this series represents,
+# so summing across a service doesn't double-count both ends of the same call.
+- source_labels: [service_name, span_kind]
+  regex: '.+;SPAN_KIND_(?:SERVER|CONSUMER)'
+  target_label: cdm_direction
+  replacement: inbound
+- source_labels: [service_name, span_kind]
+  regex: '.+;SPAN_KIND_(?:CLIENT|PRODUCER)'
+  target_label: cdm_direction
+  replacement: outbound
+# cdm_status: collapse the OTel span status into ok/error.
+- source_labels: [service_name, status_code]
+  regex: '.+;STATUS_CODE_ERROR'
+  target_label: cdm_status
+  replacement: error
+- source_labels: [service_name, status_code]
+  regex: '.+;(?:STATUS_CODE_OK|STATUS_CODE_UNSET)'
+  target_label: cdm_status
+  replacement: ok
+# cdm_metric: the queryable canonical identity, in place of a renamed __name__ (which
+# stays exactly as the connector emits it). One shared value for bucket/sum/count:
+# histogram_quantile() keys off the `le` label's presence, not the metric name.
+- source_labels: [__name__]
+  regex: 'traces_span_metrics_calls_total'
+  target_label: cdm_metric
+  replacement: requests_total
+- source_labels: [__name__]
+  regex: 'traces_span_metrics_duration_milliseconds_(?:bucket|sum|count)'
+  target_label: cdm_metric
+  replacement: request_duration
+# ---- Canonical Data Model: OTel RPC semantic-convention metrics ----------------
+# A third, genuinely different source type on this same pipeline: metrics emitted
+# directly by OTel RPC client/server instrumentation (rpc_client_duration_milliseconds
+# / rpc_server_duration_milliseconds -- confirmed present from both a Java and a Go
+# SDK in this demo), not derived from spans via the spanmetrics connector. Same
+# cdm_* labels, same generic pattern -- a real example of why the canonical model
+# is defined once, independent of any one source (see model/schema.json).
+#
+# Guarded on `service_name` being *empty* and `rpc_system` non-empty: these metrics
+# share this pipeline with spanmetrics (which also carries service_name, and can
+# itself carry an rpc_system dimension -- see otelcol-config.yml -- so rpc_system
+# alone isn't a safe guard). exported_job is used instead of spanmetrics' service_name
+# for the service label because this metric family doesn't carry service.name as a
+# promoted attribute the way spanmetrics-connector output does, only the OTel
+# resource-derived job (service.namespace/service.name, renamed to exported_job by
+# Prometheus since our own scrape job is also literally named "job").
+- source_labels: [service_name, exported_job]
+  regex: ';[^/]+/(.+)'
+  target_label: service
+  replacement: '${1}'
+- source_labels: [service_name, rpc_system]
+  regex: ';.+'
+  target_label: cdm_source
+  replacement: otel_semconv
+- source_labels: [service_name, rpc_system]
+  regex: ';.+'
+  target_label: cdm_unit
+  replacement: ms
+- source_labels: [service_name, rpc_system]
+  regex: ';.+'
+  target_label: cdm_request_type
+  replacement: rpc
+- source_labels: [service_name, rpc_service, rpc_method]
+  regex: ';(.+);(.+)'
+  target_label: cdm_request_context
+  replacement: '${1}/${2}'
+- source_labels: [service_name, __name__]
+  regex: ';rpc_client_.*'
+  target_label: cdm_direction
+  replacement: outbound
+- source_labels: [service_name, __name__]
+  regex: ';rpc_server_.*'
+  target_label: cdm_direction
+  replacement: inbound
+# rpc_grpc_status_code only classifies gRPC; other rpc_system values (e.g. a future
+# JSON-RPC source) would need their own status mapping added here.
+- source_labels: [service_name, rpc_grpc_status_code]
+  regex: ';0'
+  target_label: cdm_status
+  replacement: ok
+- source_labels: [service_name, rpc_grpc_status_code]
+  regex: ';[1-9][0-9]*'
+  target_label: cdm_status
+  replacement: error
+# Unlike spanmetrics/Envoy, this source has no dedicated "calls" counter -- the
+# histogram's own _count series *is* the request count (histogram_quantile only
+# ever reads _bucket, so retagging _count doesn't affect the quantile panels).
+- source_labels: [__name__]
+  regex: 'rpc_(?:client|server)_duration_milliseconds_count'
+  target_label: cdm_metric
+  replacement: requests_total
+- source_labels: [__name__]
+  regex: 'rpc_(?:client|server)_duration_milliseconds_(?:bucket|sum)'
+  target_label: cdm_metric
+  replacement: request_duration
 scrape_configs:
 - job_name: otel-collector
   static_configs:
@@ -29,161 +175,6 @@ scrape_configs:
   - targets:
     - localhost:9090 # prometheus endpoint address
   metrics_path: /prometheus/metrics
-- job_name: otelcol-metrics
-  static_configs:
-  - targets:
-    - 'otelcol:9464'
-  metric_relabel_configs:
-  # ---- Canonical Data Model: OTel spanmetrics -----------------------------------
-  # This endpoint also carries docker_stats/redis/httpcheck/self-telemetry series, which
-  # have no `service_name` label — every rule below is gated on `service_name` being
-  # non-empty, so it only ever fires on spanmetrics-connector output and is a no-op
-  # (sample passes through unchanged) for everything else sharing this endpoint.
-  - source_labels: [service_name]
-    regex: '(.+)'
-    target_label: service
-    replacement: '${1}'
-  # cdm_source: which relabeling section (source type) produced this series -- one
-  # value per section in this file, so it's queryable/selectable instead of only
-  # living in a comment.
-  - source_labels: [service_name]
-    regex: '.+'
-    target_label: cdm_source
-    replacement: spanmetrics
-  # The connector's duration histogram is milliseconds by default and is left that way
-  # (see otelcol-config.yml) — cdm_unit records it rather than converting it, since
-  # relabeling can rewrite labels but never a sample's value.
-  - source_labels: [service_name]
-    regex: '.+'
-    target_label: cdm_unit
-    replacement: ms
-  # cdm_request_type: default to internal, then override with progressively more
-  # specific signals (later rules win when they match) — db < http < rpc.
-  - source_labels: [service_name]
-    regex: '.+'
-    target_label: cdm_request_type
-    replacement: internal
-  - source_labels: [service_name, db_system]
-    regex: '.+;.+'
-    target_label: cdm_request_type
-    replacement: db
-  - source_labels: [service_name, http_method, http_request_method]
-    regex: '.+;(?:.+;.*|.*;.+)'
-    target_label: cdm_request_type
-    replacement: http
-  - source_labels: [service_name, rpc_system]
-    regex: '.+;.+'
-    target_label: cdm_request_type
-    replacement: rpc
-  # cdm_request_context: default to span_name, then override with a more specific
-  # operation identifier when one is present (db_operation, then http_route).
-  - source_labels: [service_name, span_name]
-    regex: '.+;(.+)'
-    target_label: cdm_request_context
-    replacement: '${1}'
-  - source_labels: [service_name, db_operation]
-    regex: '.+;(.+)'
-    target_label: cdm_request_context
-    replacement: '${1}'
-  - source_labels: [service_name, http_route]
-    regex: '.+;(.+)'
-    target_label: cdm_request_context
-    replacement: '${1}'
-  # cdm_direction: from span.kind — which side of the call this series represents,
-  # so summing across a service doesn't double-count both ends of the same call.
-  - source_labels: [service_name, span_kind]
-    regex: '.+;SPAN_KIND_(?:SERVER|CONSUMER)'
-    target_label: cdm_direction
-    replacement: inbound
-  - source_labels: [service_name, span_kind]
-    regex: '.+;SPAN_KIND_(?:CLIENT|PRODUCER)'
-    target_label: cdm_direction
-    replacement: outbound
-  # cdm_status: collapse the OTel span status into ok/error.
-  - source_labels: [service_name, status_code]
-    regex: '.+;STATUS_CODE_ERROR'
-    target_label: cdm_status
-    replacement: error
-  - source_labels: [service_name, status_code]
-    regex: '.+;(?:STATUS_CODE_OK|STATUS_CODE_UNSET)'
-    target_label: cdm_status
-    replacement: ok
-  # cdm_metric: the queryable canonical identity, in place of a renamed __name__ (which
-  # stays exactly as the connector emits it). One shared value for bucket/sum/count:
-  # histogram_quantile() keys off the `le` label's presence, not the metric name.
-  - source_labels: [__name__]
-    regex: 'traces_span_metrics_calls_total'
-    target_label: cdm_metric
-    replacement: requests_total
-  - source_labels: [__name__]
-    regex: 'traces_span_metrics_duration_milliseconds_(?:bucket|sum|count)'
-    target_label: cdm_metric
-    replacement: request_duration
-  # ---- Canonical Data Model: OTel RPC semantic-convention metrics ----------------
-  # A third, genuinely different source type on this same endpoint: metrics emitted
-  # directly by OTel RPC client/server instrumentation (rpc_client_duration_milliseconds
-  # / rpc_server_duration_milliseconds -- confirmed present from both a Java and a Go
-  # SDK in this demo), not derived from spans via the spanmetrics connector. Same
-  # cdm_* labels, same generic pattern -- a real example of why the canonical model
-  # is defined once, independent of any one source (see model/schema.json).
-  #
-  # Guarded on `service_name` being *empty* and `rpc_system` non-empty: these metrics
-  # share this endpoint with spanmetrics (which also carries service_name, and can
-  # itself carry an rpc_system dimension -- see otelcol-config.yml -- so rpc_system
-  # alone isn't a safe guard). exported_job is used instead of spanmetrics' service_name
-  # for the service label because this metric family doesn't carry service.name as a
-  # promoted attribute the way spanmetrics-connector output does, only the OTel
-  # resource-derived job (service.namespace/service.name, renamed to exported_job by
-  # Prometheus since our own scrape job is also literally named "job").
-  - source_labels: [service_name, exported_job]
-    regex: ';[^/]+/(.+)'
-    target_label: service
-    replacement: '${1}'
-  - source_labels: [service_name, rpc_system]
-    regex: ';.+'
-    target_label: cdm_source
-    replacement: otel_semconv
-  - source_labels: [service_name, rpc_system]
-    regex: ';.+'
-    target_label: cdm_unit
-    replacement: ms
-  - source_labels: [service_name, rpc_system]
-    regex: ';.+'
-    target_label: cdm_request_type
-    replacement: rpc
-  - source_labels: [service_name, rpc_service, rpc_method]
-    regex: ';(.+);(.+)'
-    target_label: cdm_request_context
-    replacement: '${1}/${2}'
-  - source_labels: [service_name, __name__]
-    regex: ';rpc_client_.*'
-    target_label: cdm_direction
-    replacement: outbound
-  - source_labels: [service_name, __name__]
-    regex: ';rpc_server_.*'
-    target_label: cdm_direction
-    replacement: inbound
-  # rpc_grpc_status_code only classifies gRPC; other rpc_system values (e.g. a future
-  # JSON-RPC source) would need their own status mapping added here.
-  - source_labels: [service_name, rpc_grpc_status_code]
-    regex: ';0'
-    target_label: cdm_status
-    replacement: ok
-  - source_labels: [service_name, rpc_grpc_status_code]
-    regex: ';[1-9][0-9]*'
-    target_label: cdm_status
-    replacement: error
-  # Unlike spanmetrics/Envoy, this source has no dedicated "calls" counter -- the
-  # histogram's own _count series *is* the request count (histogram_quantile only
-  # ever reads _bucket, so retagging _count doesn't affect the quantile panels).
-  - source_labels: [__name__]
-    regex: 'rpc_(?:client|server)_duration_milliseconds_count'
-    target_label: cdm_metric
-    replacement: requests_total
-  - source_labels: [__name__]
-    regex: 'rpc_(?:client|server)_duration_milliseconds_(?:bucket|sum)'
-    target_label: cdm_metric
-    replacement: request_duration
 - job_name: node_exporter
   static_configs:
   - targets:

@@ -4,15 +4,15 @@
 # Provenance-includes-copyright: The OpenTelemetry Authors.
 # Modifications [Grafana Labs]:
 # - Removed unnecessary parts for the purposes of this demo
-# - Canonical Data Model: expose metrics via a `prometheus` scrape endpoint instead of
-#   pushing OTLP, so Prometheus can apply metric_relabel_configs (push ingestion has no
-#   relabeling stage in Prometheus at all). node_exporter is now scraped by Prometheus
-#   directly, so the collector's internal `prometheus` receiver (which used to scrape
-#   both node_exporter and the collector's own :8888 self-telemetry) is removed to avoid
-#   a redundant double-hop.
+# - node_exporter is scraped by Prometheus directly, so the collector's internal
+#   `prometheus` receiver (which used to scrape both node_exporter and the collector's
+#   own :8888 self-telemetry) is removed to avoid a redundant double-hop.
 # - spanmetrics connector: project HTTP/RPC semantic-convention span attributes
 #   (old and new semconv generations, since the demo mixes SDKs/languages/versions)
 #   as dimensions, so the canonical relabeling rules have something to map from.
+# - Canonical Data Model: metrics push via OTLP (`otlphttp`) to Prometheus's
+#   experimental receive_relabel_configs -- see model/README.md and
+#   prometheus/prometheus#19675.
 
 receivers:
   otlp:
@@ -37,8 +37,10 @@ receivers:
 
 exporters:
   debug:
-  prometheus:
-    endpoint: "0.0.0.0:9464"
+  otlphttp:
+    endpoint: "http://prometheus:9090/prometheus/api/v1/otlp"
+    tls:
+      insecure: true
 
 processors:
   batch:
@@ -83,7 +85,7 @@ service:
     metrics:
       receivers: [docker_stats, httpcheck/frontendproxy, otlp, redis, spanmetrics]
       processors: [batch]
-      exporters: [prometheus, debug]
+      exporters: [otlphttp, debug]
     logs:
       receivers: [otlp]
       processors: [batch]

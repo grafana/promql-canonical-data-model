@@ -526,7 +526,9 @@ services:
 
   # Prometheus
   prometheus:
-    image: ${PROMETHEUS_IMAGE}
+    build:
+      context: ./src/prometheus
+      dockerfile: Dockerfile.pr19675
     container_name: prometheus
     command:
       - --web.console.templates=/etc/prometheus/consoles
@@ -537,7 +539,8 @@ services:
       - --web.enable-lifecycle
       - --web.route-prefix=/prometheus/
       - --web.external-url=/prometheus/
-      - --enable-feature=exemplar-storage
+      - --enable-feature=exemplar-storage,receive-relabel-configs
+      - --web.enable-otlp-receiver
     volumes:
       - ./src/prometheus/prometheus-config.yaml:/etc/prometheus/prometheus-config.yaml
       - ../rules:/etc/prometheus/rules

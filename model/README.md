@@ -133,6 +133,17 @@ just documented in a comment. Five types are mapped:
   other, not a special case — and it's the one native-seconds source in this demo,
   where every other source reports `ms`, a live example of why `cdm_unit` exists.
 
+## Push ingestion (experimental)
+
+This demo scrapes rather than pushes because stock Prometheus only ever runs relabeling
+from the scrape loop — push ingestion (remote-write, OTLP) has no relabeling stage at all.
+[prometheus/prometheus#19675](https://github.com/prometheus/prometheus/pull/19675),
+open and unmerged, adds `receive_relabel_configs` to close that gap: relabeling applied to
+remote-write/OTLP-ingested samples before storage. `prometheus-config.yaml`'s
+`receive_relabel_configs` block and `otelcol-config.yml`'s `metrics/push` pipeline
+validate it against this demo's own spanmetrics rules — same rules, same output as the
+scrape path, confirmed live, only *where* they run changes.
+
 ## Known v1 gaps
 
 - **HTTP semantic-convention metrics aren't mapped.** Unlike RPC, this one's a genuine
