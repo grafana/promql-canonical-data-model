@@ -32,15 +32,15 @@ behind each label.
 ## Architecture
 
 ```
-                       ┌───────────────────────────┐
-  OTel Demo services   │      OTel Collector        │
-  (OTLP: traces,    ──▶│  spanmetrics connector     │──┐
-  RPC semconv metrics) │  docker_stats / redis /     │  │  scrape (:9464,
-                       │  httpcheck receivers        │  │  Prometheus exposition)
-                       └───────────────────────────┘  │
-                                                        ▼
-  node_exporter ─────────────────────scrape──────▶ ┌─────────────┐
-  Envoy admin stats ─────────────────scrape──────▶ │  Prometheus │
+                       ┌─────────────────────────┐
+  OTel Demo services   │     OTel Collector      │
+  (OTLP: traces,    ──▶│  spanmetrics connector  │──┐
+  RPC semconv metrics) │  docker_stats / redis / │  │  scrape (:9464,
+                       │  httpcheck receivers    │  │  Prometheus exposition)
+                       └─────────────────────────┘  │
+                                                    ▼
+  node_exporter ─────────────────────scrape───────▶ ┌─────────────┐
+  Envoy admin stats ─────────────────scrape───────▶ │  Prometheus │
                                                     │             │
                                                     │ metric_     │  ◀── canonical
                                                     │ relabel_    │      mapping lives
