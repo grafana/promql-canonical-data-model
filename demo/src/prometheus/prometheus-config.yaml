@@ -233,11 +233,10 @@ receive_relabel_configs:
 # Guarded on `service_name` empty + `rpc_system` present: rpc_system alone would also
 # match spanmetrics-connector output (see otelcol-config.yml's rpc.system dimension),
 # so requiring service_name to be empty narrows the guard to this family specifically.
-# `service` comes from `exported_job` -- the OTel resource's own job
-# (service.namespace/service.name), renamed because our scrape job label is also
-# literally "job".
-- source_labels: [service_name, exported_job]
-  regex: ';[^/]+/(.+)'
+# OTLP ingestion keeps the resource identity in `job`; there is no scrape job
+# collision to rename it to `exported_job`. The namespace prefix is optional.
+- source_labels: [service_name, rpc_system, job]
+  regex: ';.+;(?:[^/]+/)?([^/]+)'
   target_label: service
   replacement: '${1}'
 - source_labels: [service_name, rpc_system]
