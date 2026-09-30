@@ -8,9 +8,14 @@ Most organizations ingest metrics from more than one convention at once — a Pr
 SDK here, OpenTelemetry there, a service mesh's own naming scheme, spans turned into
 RED metrics via span-to-metrics pipelines. This repo shows a pragmatic way to unify them:
 define a small canonical label schema once, and map every source into it using nothing
-but stock **Prometheus relabeling rules** — `metric_relabel_configs`. Because relabeling
-rewrites labels on series you already scrape rather than materializing new ones, the
-canonical model comes with **zero additional cardinality**.
+but stock **Prometheus relabeling rules**. Sources scraped directly use the standard
+`metric_relabel_configs`; sources that only ever arrive by push (OTLP) use
+`receive_relabel_configs`, an experimental addition to Prometheus
+([prometheus/prometheus#19675](https://github.com/prometheus/prometheus/pull/19675),
+open and unmerged) that applies the exact same relabeling rules before push-ingested
+samples are stored. Because relabeling rewrites labels on series you already scrape or
+ingest rather than materializing new ones, the canonical model comes with **zero
+additional cardinality**.
 
 ## What's here
 
@@ -32,45 +37,51 @@ behind each label.
 ## Architecture
 
 ```
-                       ┌─────────────────────────┐
-  OTel Demo services   │     OTel Collector      │
-  (OTLP: traces,    ──▶│  spanmetrics connector  │──┐
-  RPC semconv metrics) │  docker_stats / redis / │  │  scrape (:9464,
-                       │  httpcheck receivers    │  │  Prometheus exposition)
-                       └─────────────────────────┘  │
-                                                    ▼
-  node_exporter ─────────────────────scrape───────▶ ┌─────────────┐
-  Envoy admin stats ─────────────────scrape───────▶ │  Prometheus │
-                                                    │             │
-                                                    │ metric_     │  ◀── canonical
-                                                    │ relabel_    │      mapping lives
-                                                    │ configs     │      here, per source
-                                                    └──────┬──────┘
-                                                           │ __name__ untouched, enriched
-                                                           │ with cdm_metric="requests_total"
-                                                           │ / "request_duration" + cdm_* labels
-                                                           ▼
-                                    ┌──────────────────────┼───────────────────────┐
-                                    ▼                      ▼                       ▼
-                           SAAFE alerts (rules/saafe)   anomaly detection      generic RED
-                           query {cdm_metric=...}       (rules/anomaly)        dashboard,
-                           inline, no recording-rule                          per service
+  OTel Demo services                ┌────────────────────────────┐
+  (OTLP: traces, RPC     ─────────▶ │       OTel Collector        │
+  semconv metrics,                  │   spanmetrics connector     │
+  docker_stats/redis/               │   (+ docker_stats/redis/    │
+  httpcheck)                        │    httpcheck receivers)     │
+                                     └──────────────┬──────────────┘
+                                                     │ push (OTLP)
+                                                     ▼
+  Envoy admin stats ────────scrape───▶ ┌────────────────────────────────┐
+  Grafana's own metrics ────scrape───▶ │            Prometheus            │
+  Prometheus's own metrics ─scrape───▶ │                                   │
+                                        │      metric_relabel_configs       │ ◀── canonical mapping,
+                                        │      (scrape-based sources)       │     stock Prometheus
+                                        │                                   │
+                                        │     receive_relabel_configs       │ ◀── canonical mapping,
+                                        │      (push-based sources,         │     experimental
+                                        │   prometheus/prometheus#19675)    │     (see below)
+                                        └────────────────┬──────────────────┘
+                                                          │ __name__ untouched, enriched
+                                                          │ with cdm_metric="requests_total"
+                                                          │ / "request_duration" + cdm_* labels
+                                                          ▼
+                                    ┌───────────────────────┼────────────────────────┐
+                                    ▼                       ▼                        ▼
+                           SAAFE alerts (rules/saafe)   anomaly detection       generic RED
+                           query {cdm_metric=...}       (rules/anomaly)         dashboard,
+                           inline, no recording-rule                           per service
                            layer in between
 ```
 
-Metrics reach Prometheus by **scrape**, not push, on purpose: Prometheus's OTLP and
-remote-write receive paths have no relabeling stage at all (confirmed against
-Prometheus's own source — see the talk for details), so relabeling only exists as a
-scrape-time thing. The collector keeps centralizing ingestion exactly as `saafe-model`
-already did; it just exposes a `prometheus`-format scrape endpoint instead of pushing.
+Envoy's admin stats and the observability stack's own HTTP metrics (Grafana, Prometheus)
+are scraped directly, mapped with stock `metric_relabel_configs`. Everything else reaches
+Prometheus the way the upstream OpenTelemetry Demo already ingests it: pushed via OTLP
+straight from the collector. Stock Prometheus's OTLP and remote-write receive paths have
+no relabeling stage, so `receive_relabel_configs` applies the exact same rules to those
+push-ingested samples before they're stored — see
+[`model/README.md`](model/README.md)'s "Push ingestion" section for the details.
 
 The canonical model is defined formally, independent of the mapping, in
 [`model/schema.json`](model/schema.json) (a [JSON Schema](https://json-schema.org/) —
 which labels exist, what values they take, why). The mapping itself — how each source's
-raw series gets enriched with those labels — is hand-written `metric_relabel_configs`
-directly in `demo/src/prometheus/prometheus-config.yaml`; a schema-to-rules generator
-was tried and dropped (see [`model/README.md`](model/README.md)) once the remaining
-regex patterns turned out not to be complex enough to justify it.
+raw series gets enriched with those labels — is hand-written `metric_relabel_configs`/
+`receive_relabel_configs` directly in `demo/src/prometheus/prometheus-config.yaml`; a
+schema-to-rules generator was tried and dropped (see [`model/README.md`](model/README.md))
+once the remaining regex patterns turned out not to be complex enough to justify it.
 
 ## Quick start
 
@@ -83,8 +94,7 @@ Requires Docker. Then:
 
 - `http://localhost:8080/grafana/` — Grafana. See the **Canonical Data Model** folder for
   the generic per-service RED dashboard, **SAAFE** for the Assertions dashboard, and
-  **Node Exporter** for node-level saturation (a different entity type — see
-  `model/README.md`).
+  **Node Exporter** for node-level saturation.
 - `http://localhost:8080/prometheus/` — Prometheus, to query `{cdm_metric="requests_total"}` /
   `{cdm_metric="request_duration"}` directly — see [`model/README.md`](model/README.md)
   for why it's a label selector rather than a metric name.
@@ -98,7 +108,7 @@ Requires Docker. Then:
   from `saafe-model`.
 - `model/` — the canonical data model: the formal schema (`schema.json`) and its prose
   reference (`README.md`). No mapping logic and no recording rules live here — the
-  mapping is hand-written `metric_relabel_configs` in
+  mapping is hand-written `metric_relabel_configs`/`receive_relabel_configs` in
   `demo/src/prometheus/prometheus-config.yaml`, and consumers query
   `{cdm_metric=...}` inline.
 - `rules/saafe/`, `rules/anomaly/` — the SAAFE alert taxonomy and the
