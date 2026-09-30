@@ -1,0 +1,27 @@
+groups:
+  - name: SAAFEBaseRules
+    rules:
+
+      ################################################################################
+      #                     Constants                                                #
+      ################################################################################
+
+      # Scoring weights by saafe_severity
+      - record: saafe:scoring:weight
+        expr: |-
+          1
+        labels:
+          saafe_severity: info
+
+      - record: saafe:scoring:weight
+        expr: |-
+          1
+        labels:
+          saafe_severity: warning
+
+
+      - record: saafe:scoring:weight
+        expr: |-
+          2
+        labels:
+          saafe_severity: critical

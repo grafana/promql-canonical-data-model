@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Provenance-includes-location: https://github.com/open-telemetry/opentelemetry-demo/blob/main/src/grafana/provisioning/datasources/default.yaml
+# Provenance-includes-license: Apache-2.0
+# Provenance-includes-copyright: The OpenTelemetry Authors.
+# Modifications [Grafana Labs]:
+# - Removed unnecessary parts for the purposes of this demo
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: webstore-metrics
+    type: prometheus
+    url: http://prometheus:9090/prometheus
+    editable: true
+    isDefault: true
+    jsonData:
+      timeInterval: 60s
+      exemplarTraceIdDestinations:
+        - datasourceUid: webstore-traces
+          name: trace_id

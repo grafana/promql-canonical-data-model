@@ -1,0 +1,51 @@
+groups:
+  - name: SAAFESaturation
+    rules:
+      - alert: HighCPUUsage
+        expr: |-
+          100 * (1 - avg by (instance, job) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 80
+        for: 10m
+        labels:
+          severity: warning
+          saafe_severity: warning
+          saafe_category: saturation
+
+      - alert: HighMemoryUsage
+        expr: 100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 80
+        for: 10m
+        labels:
+          severity: warning
+          saafe_severity: warning
+          saafe_category: saturation
+
+      - alert: HighFilesystemUsage
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"})) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          saafe_severity: warning
+          saafe_category: saturation
+
+      - alert: HighNetworkTransmitUsage
+        expr: rate(node_network_transmit_bytes_total[5m]) / (1024*1024) > 100
+        for: 10m
+        labels:
+          severity: warning
+          saafe_severity: warning
+          saafe_category: saturation
+
+      - alert: HighNetworkReceiveUsage
+        expr: rate(node_network_receive_bytes_total[5m]) / (1024*1024) > 100
+        for: 10m
+        labels:
+          severity: warning
+          saafe_severity: warning
+          saafe_category: saturation
+
+      - alert: HighDiskIOUsage
+        expr: rate(node_disk_io_time_seconds_total[5m]) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          saafe_severity: warning
+          saafe_category: saturation

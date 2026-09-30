@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: 'Canonical Data Model'
+    orgId: 1
+    folder: 'Canonical Data Model'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/canonical

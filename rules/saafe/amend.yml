@@ -1,0 +1,71 @@
+groups:
+  - name: SAAFEAmend
+    rules:
+
+    # track otel service versions
+    # `service` is carried straight through here rather than dropped by the group-by:
+    # target_info promotes it natively from the OTel resource (a different label
+    # convention than spanmetrics' service_name -- see model/README.md), so no
+    # relabeling is needed to get it. Series without a service label (exporter/
+    # runtime info below) simply group under service="", which cdm-scoped consumers
+    # like the Canonical Data Model dashboard's Insights panel naturally never match.
+    - record: saafe:version:info
+      expr: |-
+        group by (job, service, version) (
+          label_replace(
+              traces_target_info{job!="", service_version!=""}
+                or
+              target_info{job!="", service_version!=""},
+            "version", "$1", "service_version", "(.+)"
+          )
+        )
+      labels:
+        saafe_version_type: service
+
+    # track prometheus exporter versions
+    - record: saafe:version:info
+      expr: |-
+        group by (job, service, version, saafe_source) (
+          label_replace({__name__=~"[A-Za-z_]*exporter_build_info", version != ""}, "saafe_source", "$1", "__name__", "([A-Za-z_]*exporter)_build_info")
+        )
+      labels:
+        saafe_version_type: exporter
+
+    # track runtime version changes
+    - record: saafe:version:info
+      expr: group by (job, service, version) (go_info)
+      labels:
+        saafe_version_type: runtime
+        saafe_source: golang
+
+    - record: saafe:version:info
+      expr: group by (job, service, version) (python_info)
+      labels:
+        saafe_version_type: runtime
+        saafe_source: python
+
+    - record: saafe:version:info
+      expr: group by (job, service, version) (jvm_info)
+      labels:
+        saafe_version_type: runtime
+        saafe_source: jvm
+
+    - record: saafe:release:versions
+      expr: |
+        count by(job, service, saafe_version_type, saafe_source)(
+          count_over_time(
+            count by(job, service, version, saafe_version_type, saafe_source)(
+              saafe:version:info
+            )[5m:1m]
+          )
+        )
+
+      ################################################################
+      #                        Alerts                                #
+      ################################################################
+
+    - alert: "VersionUpdated"
+      expr: ceil(deriv(saafe:release:versions[5m])) > 0
+      labels:
+        saafe_category: amend
+        saafe_severity: info

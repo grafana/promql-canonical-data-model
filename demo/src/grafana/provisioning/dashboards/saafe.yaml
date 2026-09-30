@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: 'SAAFE'
+    orgId: 1
+    folder: 'SAAFE'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/saafe

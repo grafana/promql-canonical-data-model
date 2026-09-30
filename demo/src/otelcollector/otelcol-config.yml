@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: Apache-2.0
+# Provenance-includes-location: https://github.com/open-telemetry/opentelemetry-demo/blob/main/src/otelcollector/otelcol-config.yml
+# Provenance-includes-license: Apache-2.0
+# Provenance-includes-copyright: The OpenTelemetry Authors.
+# Modifications [Grafana Labs]:
+# - Removed unnecessary parts for the purposes of this demo
+# - spanmetrics connector: project HTTP/RPC semantic-convention span attributes
+#   (old and new semconv generations, since the demo mixes SDKs/languages/versions)
+#   as dimensions, so the canonical relabeling rules have something to map from.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: ${env:OTEL_COLLECTOR_HOST}:${env:OTEL_COLLECTOR_PORT_GRPC}
+      http:
+        endpoint: ${env:OTEL_COLLECTOR_HOST}:${env:OTEL_COLLECTOR_PORT_HTTP}
+        cors:
+          allowed_origins:
+            - "http://*"
+            - "https://*"
+  httpcheck/frontendproxy:
+    targets:
+      - endpoint: http://frontendproxy:${env:ENVOY_PORT}
+  docker_stats:
+    endpoint: unix:///var/run/docker.sock
+  redis:
+    endpoint: "valkey-cart:6379"
+    username: "valkey"
+    collection_interval: 10s
+
+exporters:
+  debug:
+  otlphttp:
+    # /prometheus/ prefix matches Prometheus's --web.route-prefix.
+    endpoint: "http://prometheus:9090/prometheus/api/v1/otlp"
+    tls:
+      insecure: true
+
+processors:
+  batch:
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # could be removed when https://github.com/vercel/next.js/pull/64852 is fixed upstream
+          - replace_pattern(name, "\\?.*", "")
+          - replace_match(name, "GET /api/products/*", "GET /api/products/{productId}")
+
+connectors:
+  spanmetrics:
+    # Left at the connector's default (ms) rather than converted -- see model/README.md.
+    dimensions:
+      # HTTP semantic conventions (old and new generations)
+      - name: http.method
+      - name: http.request.method
+      - name: http.route
+      - name: http.status_code
+      - name: http.response.status_code
+      # RPC/gRPC semantic conventions
+      - name: rpc.system
+      - name: rpc.service
+      - name: rpc.method
+      - name: rpc.grpc.status_code
+      # Database semantic conventions
+      - name: db.system
+      - name: db.operation
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform, batch]
+      exporters: [debug, spanmetrics]
+    metrics:
+      receivers: [docker_stats, httpcheck/frontendproxy, otlp, redis, spanmetrics]
+      processors: [batch]
+      exporters: [otlphttp, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "0.0.0.0"
+                port: 8888
