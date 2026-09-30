@@ -11,7 +11,8 @@
     },
     "cdm_source": {
       "description": "Which source type produced this series -- one value per relabeling section in prometheus-config.yaml, so the source type is queryable/selectable instead of only living in a comment.",
-      "enum": ["spanmetrics", "otel_semconv", "envoy", "grafana", "prometheus"]
+      "examples": ["spanmetrics", "otel_semconv", "envoy", "grafana", "prometheus"],
+      "type": "string"
     },
     "service": {
       "description": "The entity this series is about. Not cdm_-prefixed: it's a near-universal ecosystem convention (OTel service.name, Grafana/Loki/Tempo cross-signal correlation), not vocabulary this model invents.",
