@@ -173,6 +173,45 @@ scrape_configs:
   - targets:
     - localhost:9090 # prometheus endpoint address
   metrics_path: /prometheus/metrics
+  metric_relabel_configs:
+  # ---- Canonical Data Model: Prometheus's own HTTP metrics -----------------------
+  # A sixth naming convention: classic Prometheus client-library instrumentation,
+  # same pattern as the Grafana job -- not OTel-derived, no resource attributes.
+  # Applies unconditionally: this job only ever scrapes Prometheus itself. Unlike
+  # Grafana/Envoy, there's a dedicated requests-total counter (prometheus_http_requests_total)
+  # rather than needing to split it off the histogram's own _count series.
+  - source_labels: [instance]
+    regex: '([^:]+):.*'
+    target_label: service
+    replacement: '${1}'
+  - target_label: cdm_source
+    replacement: prometheus
+  - target_label: cdm_request_type
+    replacement: http
+  - target_label: cdm_direction
+    replacement: inbound
+  - target_label: cdm_unit
+    replacement: s
+  - source_labels: [handler]
+    regex: '(.+)'
+    target_label: cdm_request_context
+    replacement: '${1}'
+  - source_labels: [code]
+    regex: '[45]\d\d'
+    target_label: cdm_status
+    replacement: error
+  - source_labels: [code]
+    regex: '[23]\d\d'
+    target_label: cdm_status
+    replacement: ok
+  - source_labels: [__name__]
+    regex: 'prometheus_http_requests_total'
+    target_label: cdm_metric
+    replacement: requests_total
+  - source_labels: [__name__]
+    regex: 'prometheus_http_request_duration_seconds_(?:bucket|sum|count)'
+    target_label: cdm_metric
+    replacement: request_duration
 - job_name: node_exporter
   static_configs:
   - targets:

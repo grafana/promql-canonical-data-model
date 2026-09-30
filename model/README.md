@@ -59,7 +59,7 @@ opt this model *out* of that convention for no benefit.
 | Label | Values | Why |
 |---|---|---|
 | `cdm_metric` | `requests_total`, `request_duration` | The canonical identity to query by, in place of a renamed metric name. See above. |
-| `cdm_source` | `spanmetrics`, `otel_semconv`, `envoy`, `grafana` | Which source type produced this series — one value per relabeling section in `prometheus-config.yaml`. Makes the source type queryable/selectable instead of only living in a comment. |
+| `cdm_source` | `spanmetrics`, `otel_semconv`, `envoy`, `grafana`, `prometheus` | Which source type produced this series — one value per relabeling section in `prometheus-config.yaml`. Makes the source type queryable/selectable instead of only living in a comment. |
 | `service` | free text | The entity this series is about. Renamed from whatever the source calls it (`service_name` for spanmetrics, a static value derived from `instance` for Envoy/Grafana). |
 | `env` | free text | Deployment environment, from `deployment.environment.name` (or the older `deployment.environment`). Not populated in this demo (single environment) but included so the schema is complete for real deployments. |
 | `cdm_request_type` | `http`, `rpc`, `db`, `internal` | *What kind* of request. Derived from *which* semantic-convention attribute is present on the source, not from a fixed source-specific value — this is what lets the same query work across HTTP, gRPC and future sources without listing them all. |
@@ -107,7 +107,7 @@ not a fact about this one demo's topology. A rule that hardcodes something only 
 this specific deployment (a literal service name, say) isn't mapping a source type —
 it's papering over one instance of it. Each type also tags itself with `cdm_source`,
 so which relabeling section produced a series is queryable/selectable directly, not
-just documented in a comment. Four types are mapped:
+just documented in a comment. Five types are mapped:
 
 - **OTel spanmetrics** (traces → RED metrics via the connector) — HTTP/RPC/DB, keyed on
   `service_name` being present.
@@ -126,6 +126,11 @@ just documented in a comment. Four types are mapped:
   technique as Envoy. The observability stack's own tooling is a source type like any
   other, not a special case — and it's the one native-seconds source in this demo,
   where every other source reports `ms`, a live example of why `cdm_unit` exists.
+- **Prometheus's own HTTP metrics** (`prometheus_http_requests_total`) — the same
+  classic client-library convention as Grafana, `service` derived from `instance` the
+  same way. Unlike Grafana, there's a dedicated requests-total counter rather than a
+  histogram `_count` to repurpose — the same canonical shape, reached two different
+  ways depending on what the source actually exposes.
 
 ## Push ingestion (experimental)
 
