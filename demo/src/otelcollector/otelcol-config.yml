@@ -7,9 +7,6 @@
 # - spanmetrics connector: project HTTP/RPC semantic-convention span attributes
 #   (old and new semconv generations, since the demo mixes SDKs/languages/versions)
 #   as dimensions, so the canonical relabeling rules have something to map from.
-# - Canonical Data Model: metrics push via OTLP (`otlphttp`) to Prometheus's
-#   experimental receive_relabel_configs -- see model/README.md and
-#   prometheus/prometheus#19675.
 
 receivers:
   otlp:
@@ -35,6 +32,7 @@ receivers:
 exporters:
   debug:
   otlphttp:
+    # /prometheus/ prefix matches Prometheus's --web.route-prefix.
     endpoint: "http://prometheus:9090/prometheus/api/v1/otlp"
     tls:
       insecure: true
