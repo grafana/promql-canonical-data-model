@@ -31,9 +31,7 @@ receive_relabel_configs:
   regex: '.+'
   target_label: cdm_source
   replacement: spanmetrics
-# The connector's duration histogram is milliseconds by default and is left that way
-# (see otelcol-config.yml) — cdm_unit records it rather than converting it, since
-# relabeling can rewrite labels but never a sample's value.
+# cdm_unit records the connector's default unit (ms) -- see model/README.md.
 - source_labels: [service_name]
   regex: '.+'
   target_label: cdm_unit

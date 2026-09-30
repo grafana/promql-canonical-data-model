@@ -4,9 +4,6 @@
 # Provenance-includes-copyright: The OpenTelemetry Authors.
 # Modifications [Grafana Labs]:
 # - Removed unnecessary parts for the purposes of this demo
-# - node_exporter is scraped by Prometheus directly, so the collector's internal
-#   `prometheus` receiver (which used to scrape both node_exporter and the collector's
-#   own :8888 self-telemetry) is removed to avoid a redundant double-hop.
 # - spanmetrics connector: project HTTP/RPC semantic-convention span attributes
 #   (old and new semconv generations, since the demo mixes SDKs/languages/versions)
 #   as dimensions, so the canonical relabeling rules have something to map from.
@@ -55,11 +52,7 @@ processors:
 
 connectors:
   spanmetrics:
-    # Deliberately left at the connector's default (ms), not converted to seconds here.
-    # Different sources report duration in different units (this one in ms, a future
-    # seconds-native source, ...) and relabeling can't convert a sample's value, only
-    # its labels/name — so the canonical model tags the unit as a label (cdm_unit)
-    # instead of forcing a single unit at the source. See model/README.md.
+    # Left at the connector's default (ms) rather than converted -- see model/README.md.
     dimensions:
       # HTTP semantic conventions (old and new generations)
       - name: http.method
