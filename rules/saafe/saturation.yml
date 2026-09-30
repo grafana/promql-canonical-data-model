@@ -1,11 +1,6 @@
 groups:
   - name: SAAFESaturation
     rules:
-      # node_exporter is the only node-level source in this demo, so there's nothing to
-      # unify across sources here (unlike requests/errors, spanmetrics vs. Envoy) --
-      # queried directly, same as upstream saafe-model. node_exporter series do carry
-      # cdm_entity_type="node" via relabeling (see demo/src/prometheus/prometheus-config.yaml)
-      # for dashboard classification, but no recording-rule layer sits in front of this.
       - alert: HighCPUUsage
         expr: |-
           100 * (1 - avg by (instance, job) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 80

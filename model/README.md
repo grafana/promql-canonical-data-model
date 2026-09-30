@@ -59,19 +59,14 @@ opt this model *out* of that convention for no benefit.
 | Label | Values | Why |
 |---|---|---|
 | `cdm_metric` | `requests_total`, `request_duration` | The canonical identity to query by, in place of a renamed metric name. See above. |
-| `cdm_source` | `spanmetrics`, `otel_semconv`, `envoy`, `node_exporter`, `grafana` | Which source type produced this series — one value per relabeling section in `prometheus-config.yaml`. Every section adds it, including `node_exporter` (which sets no `cdm_metric`). Makes the source type queryable/selectable instead of only living in a comment. |
-| `service` | free text | The entity this series is about. Renamed from whatever the source calls it (`service_name` for spanmetrics, a static value for Envoy, the scrape `instance` for node_exporter). |
+| `cdm_source` | `spanmetrics`, `otel_semconv`, `envoy`, `grafana` | Which source type produced this series — one value per relabeling section in `prometheus-config.yaml`. Makes the source type queryable/selectable instead of only living in a comment. |
+| `service` | free text | The entity this series is about. Renamed from whatever the source calls it (`service_name` for spanmetrics, a static value derived from `instance` for Envoy/Grafana). |
 | `env` | free text | Deployment environment, from `deployment.environment.name` (or the older `deployment.environment`). Not populated in this demo (single environment) but included so the schema is complete for real deployments. |
-| `cdm_entity_type` | `service`, `node` | Which level a series describes — a service dashboard and a node/host dashboard need different label sets, this is what tells you which one you're looking at. |
 | `cdm_request_type` | `http`, `rpc`, `db`, `internal` | *What kind* of request. Derived from *which* semantic-convention attribute is present on the source, not from a fixed source-specific value — this is what lets the same query work across HTTP, gRPC and future sources without listing them all. |
 | `cdm_request_context` | free text | *Which* request/operation — an HTTP route, an RPC method, a DB operation, falling back to whatever the source's own operation identifier is (e.g. a span name) when nothing more specific exists. |
 | `cdm_direction` | `inbound`, `outbound` | Which side of a call this series represents, from OTel's `span.kind` (SERVER/CONSUMER vs. CLIENT/PRODUCER) or the source's equivalent. Without this, summing a service's inbound and outbound calls together double-counts the same logical request from both ends. |
 | `cdm_status` | `ok`, `error` | Collapsed from whatever the source's own error signal is (span status, HTTP status class, response code class, ...). |
 | `cdm_unit` | `ms`, `s`, ... | The unit a `request_duration` series' value is actually in. Not normalized away — see above. |
-
-Saturation doesn't get a `cdm_metric` value in v1: node_exporter is the only node-level
-source in this demo, so there's nothing to unify across sources for it (see "Known v1
-gaps"). It's tagged `cdm_entity_type: node` for dashboard classification only.
 
 ## Why these labels and not more
 
@@ -112,11 +107,10 @@ not a fact about this one demo's topology. A rule that hardcodes something only 
 this specific deployment (a literal service name, say) isn't mapping a source type —
 it's papering over one instance of it. Each type also tags itself with `cdm_source`,
 so which relabeling section produced a series is queryable/selectable directly, not
-just documented in a comment. Five types are mapped:
+just documented in a comment. Four types are mapped:
 
 - **OTel spanmetrics** (traces → RED metrics via the connector) — HTTP/RPC/DB, keyed on
   `service_name` being present.
-- **node_exporter** — host saturation, single source in this demo (see "Known v1 gaps").
 - **Envoy admin stats** — a service-mesh-adjacent naming convention. `service` comes
   from the scrape target's own `instance`, not a hardcoded name, so the rule works for
   any Envoy deployment scraped this way, not just this demo's one proxy.
@@ -165,10 +159,6 @@ scrape path, confirmed live, only *where* they run changes.
   differently-scaled `le` buckets into one `histogram_quantile()` call (which would
   silently produce nonsense). A query that skips this and groups by `le` alone across
   multiple `cdm_unit` values is a bug, not a feature.
-- **Saturation isn't unified across sources.** There's only node_exporter in this demo,
-  so `rules/saafe/saturation.yml` and the anomaly framework's resource rules query
-  node_exporter's own metric names directly rather than through `cdm_metric` — nothing
-  to gain from indirecting through a label when there's only one source.
 - **redis and docker_stats sources aren't mapped yet.** They already flow through the
   same collector endpoint Prometheus scrapes; adding them is "more of the same" rather
   than new design work.

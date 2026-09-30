@@ -10,8 +10,8 @@
       "enum": ["requests_total", "request_duration"]
     },
     "cdm_source": {
-      "description": "Which source type produced this series -- one value per relabeling section in prometheus-config.yaml, so the source type is queryable/selectable instead of only living in a comment. Every section adds this label, including ones (node_exporter) that don't set cdm_metric.",
-      "enum": ["spanmetrics", "otel_semconv", "envoy", "node_exporter", "grafana"]
+      "description": "Which source type produced this series -- one value per relabeling section in prometheus-config.yaml, so the source type is queryable/selectable instead of only living in a comment.",
+      "enum": ["spanmetrics", "otel_semconv", "envoy", "grafana"]
     },
     "service": {
       "description": "The entity this series is about. Not cdm_-prefixed: it's a near-universal ecosystem convention (OTel service.name, Grafana/Loki/Tempo cross-signal correlation), not vocabulary this model invents.",
@@ -20,10 +20,6 @@
     "env": {
       "description": "Deployment environment, from deployment.environment.name (or the older deployment.environment). Not cdm_-prefixed for the same reason as service. Not populated in this demo (single environment).",
       "type": "string"
-    },
-    "cdm_entity_type": {
-      "description": "Which level a series describes -- a service dashboard and a node/host dashboard need different label sets, this is what tells you which one you're looking at.",
-      "enum": ["service", "node"]
     },
     "cdm_request_type": {
       "description": "What kind of request. Derived from which semantic-convention attribute is present on the source, not from a fixed source-specific value -- this is what lets the same query work across HTTP, gRPC and future sources without listing them all.",

@@ -179,15 +179,6 @@ scrape_configs:
   static_configs:
   - targets:
     - 'node_exporter:9100'
-  metric_relabel_configs:
-  # ---- Canonical Data Model: node_exporter ---------------------------------------
-  # It's the only node-level source in this demo, so there's nothing to unify across
-  # sources here (unlike requests/errors, spanmetrics vs. Envoy) — this just tags
-  # entity level for dashboard classification.
-  - target_label: cdm_entity_type
-    replacement: node
-  - target_label: cdm_source
-    replacement: node_exporter
 - job_name: envoy
   metrics_path: /stats/prometheus
   static_configs:
