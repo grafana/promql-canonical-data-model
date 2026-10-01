@@ -37,28 +37,28 @@ behind each label.
 ## Architecture
 
 ```
-OTel Demo services          ┌────────────────────────┐
+OTel Demo services           ┌────────────────────────┐
 (OTLP: traces, RPC ───────▶ │     OTel Collector     │
-semconv metrics)            │ spanmetrics connector  │
-                            └────────────┬───────────┘
-                                         │ push (OTLP)
-                                         ▼
+semconv metrics)             │ spanmetrics connector  │
+                             └────────────┬───────────┘
+                                          │ push (OTLP)
+                                          ▼
 Envoy admin stats  ──scrape─▶ ┌───────────────────────────────┐
 Grafana metrics    ──scrape─▶ │          Prometheus           │
 Prometheus metrics ──scrape─▶ │                               │
-                              │    metric_relabel_configs     │
-                              │    (scrape-based sources)     │
-                              │                               │
-                              │    receive_relabel_configs    │
-                              │     (push-based sources,      │
-                              │ prometheus/prometheus#19675)  │
-                              └───────────────┬───────────────┘
-                                              │
-                                              ▼
-          ┌───────────────────────────────────┴───────────────────┐
-          ▼                                   ▼                   ▼
-          SAAFE alerts                        anomaly detection   RED dashboard
-          (rules/saafe)                       (rules/anomaly)     (per service)
+                               │    metric_relabel_configs     │
+                               │    (scrape-based sources)     │
+                               │                               │
+                               │    receive_relabel_configs    │
+                               │     (push-based sources,      │
+                               │ prometheus/prometheus#19675)  │
+                               └───────────────┬───────────────┘
+                                               │
+                                               ▼
+           ┌───────────────────────────────────┴───────────────────┐
+           ▼                                   ▼                   ▼
+           SAAFE alerts                        anomaly detection   RED dashboard
+           (rules/saafe)                       (rules/anomaly)     (per service)
 ```
 
 Envoy's admin stats and the observability stack's own metrics (Grafana, Prometheus) are
