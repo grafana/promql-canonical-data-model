@@ -23,12 +23,10 @@ scrape_configs:
   static_configs:
   - targets:
     - 'frontendproxy:10000'
+    labels:
+      # Match Envoy's OTel service_name, independently of its Docker hostname.
+      service: frontend-proxy
   metric_relabel_configs:
-  # service: the entity this series is about.
-  - source_labels: [instance]
-    regex: '([^:]+):.*'
-    target_label: service
-    replacement: '${1}'
   # cdm_source: which section produced this series.
   - target_label: cdm_source
     replacement: envoy
