@@ -36,30 +36,7 @@ behind each label.
 
 ## Architecture
 
-```
-OTel Demo services           ┌────────────────────────┐
-(OTLP: traces, RPC ───────▶ │     OTel Collector     │
-semconv metrics)             │ spanmetrics connector  │
-                             └────────────┬───────────┘
-                                          │ push (OTLP)
-                                          ▼
-Envoy admin stats  ──scrape─▶ ┌───────────────────────────────┐
-Grafana metrics    ──scrape─▶ │          Prometheus           │
-Prometheus metrics ──scrape─▶ │                               │
-                               │    metric_relabel_configs     │
-                               │    (scrape-based sources)     │
-                               │                               │
-                               │    receive_relabel_configs    │
-                               │     (push-based sources,      │
-                               │ prometheus/prometheus#19675)  │
-                               └───────────────┬───────────────┘
-                                               │
-                                               ▼
-           ┌───────────────────────────────────┴───────────────────┐
-           ▼                                   ▼                   ▼
-           SAAFE alerts                        anomaly detection   RED dashboard
-           (rules/saafe)                       (rules/anomaly)     (per service)
-```
+![Architecture: OTel Demo services and Envoy/Grafana/Prometheus metrics flow into Prometheus via push (OTLP) and scrape respectively, enriched by metric_relabel_configs and receive_relabel_configs, then consumed by the generic dashboard, anomaly detection, and SAAFE alerts](docs/sources/assets/architecture.png)
 
 Envoy's admin stats and the observability stack's own metrics (Grafana, Prometheus) are
 scraped directly, enriched with stock `metric_relabel_configs`. Everything from the OTel
