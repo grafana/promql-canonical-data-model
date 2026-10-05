@@ -108,6 +108,8 @@ Requires Docker. Then:
   for why it's a label selector rather than a metric name.
 - `http://localhost:8080/loadgen/` — the load generator, to drive traffic.
 
+![Canonical Data Model — RED dashboard: inbound request rate/error ratio/latency with anomaly-detection bands, a request-rate-by-operation breakdown, outbound request rate/error ratio/latency broken out by destination, and a SAAFE assertions timeline, all for one selected service/operation/source](docs/sources/assets/red-dashboard.png)
+
 `make stop` (from `demo/`) tears everything down.
 
 ## Lessons learned
