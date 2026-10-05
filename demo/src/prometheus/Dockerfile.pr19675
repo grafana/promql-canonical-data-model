@@ -1,12 +1,12 @@
 # Builds prometheus/prometheus#19675 (jcreixell/prometheus@rw-relabel, unmerged).
 # See model/README.md's "Push ingestion" section.
-FROM golang:1.26-bookworm AS build
+FROM golang:1.27-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS build
 WORKDIR /src
 RUN git clone --branch rw-relabel --single-branch --depth 1 \
     https://github.com/jcreixell/prometheus.git .
 RUN go build -o /out/prometheus ./cmd/prometheus
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/prometheus /bin/prometheus
