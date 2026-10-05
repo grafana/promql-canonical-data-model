@@ -116,7 +116,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "showPoints": "never"
+          },
           "unit": "reqps"
         },
         "overrides": [
@@ -352,7 +354,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "showPoints": "never"
+          },
           "unit": "percentunit"
         },
         "overrides": [
@@ -588,7 +592,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "showPoints": "never"
+          },
           "unit": "s"
         },
         "overrides": [
@@ -775,7 +781,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "showPoints": "never"
+          },
           "unit": "reqps"
         },
         "overrides": []
@@ -825,7 +833,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "showPoints": "never"
+          },
           "unit": "reqps"
         },
         "overrides": []
@@ -862,7 +872,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "showPoints": "never"
+          },
           "unit": "percentunit"
         },
         "overrides": []
@@ -899,7 +911,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "showPoints": "never"
+          },
           "unit": "s"
         },
         "overrides": []
@@ -935,7 +949,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {},
+          "custom": {
+            "showPoints": "never"
+          },
           "unit": "reqps"
         },
         "overrides": []
