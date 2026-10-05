@@ -41,7 +41,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "Request rate",
-      "description": "Aggregated across operations. Shaded band and dashed \"level\" line are the robust anomaly-detection strategy's baseline for this exact query (rules/saafe/anomaly.yml, anomaly_name=\"canonical_requests\"); a filled marker under \"anomalies\" means AnomalyDetected fired.",
+      "description": "Filtered by $operation (default All, aggregated). Selecting a specific operation also drops the shaded band and dashed \"level\" line below, since rules/saafe/anomaly.yml's baseline for this query (anomaly_name=\"canonical_requests\") isn't scoped by operation; a filled marker under \"anomalies\" means AnomalyDetected fired.",
       "datasource": {
         "type": "prometheus",
         "uid": "webstore-metrics"
@@ -59,7 +59,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))",
+          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
           "legendFormat": "request rate",
           "range": true,
           "instant": false,
@@ -71,7 +71,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_lower_band",
           "range": true,
           "instant": false,
@@ -83,7 +83,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_upper_band",
           "range": true,
           "instant": false,
@@ -95,7 +95,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "expr": "ALERTS{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
           "legendFormat": "anomalies",
           "range": true,
           "instant": false,
@@ -107,7 +107,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "anomaly:level{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\"}",
+          "expr": "anomaly:level{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
           "legendFormat": "level",
           "range": true,
           "instant": false,
@@ -279,7 +279,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "Error ratio",
-      "description": "Aggregated across operations. Shaded band and dashed \"level\" line are the robust anomaly-detection strategy's baseline for this exact query (rules/saafe/anomaly.yml, anomaly_name=\"canonical_error_ratio\"); a filled marker under \"anomalies\" means AnomalyDetected fired.",
+      "description": "Filtered by $operation (default All, aggregated). Selecting a specific operation also drops the shaded band and dashed \"level\" line below, since rules/saafe/anomaly.yml's baseline for this query (anomaly_name=\"canonical_error_ratio\") isn't scoped by operation; a filled marker under \"anomalies\" means AnomalyDetected fired.",
       "datasource": {
         "type": "prometheus",
         "uid": "webstore-metrics"
@@ -297,7 +297,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_status=\"error\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))\n/\nsum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))",
+          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_status=\"error\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))\n/\nsum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
           "legendFormat": "error ratio",
           "range": true,
           "instant": false,
@@ -309,7 +309,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_lower_band",
           "range": true,
           "instant": false,
@@ -321,7 +321,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_upper_band",
           "range": true,
           "instant": false,
@@ -333,7 +333,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "expr": "ALERTS{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
           "legendFormat": "anomalies",
           "range": true,
           "instant": false,
@@ -345,7 +345,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "anomaly:level{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\"}",
+          "expr": "anomaly:level{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
           "legendFormat": "level",
           "range": true,
           "instant": false,
@@ -517,7 +517,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "Latency p95",
-      "description": "Aggregated across operations. Shaded band and dashed \"level\" line are the robust anomaly-detection strategy's baseline for this exact p95 query (rules/saafe/anomaly.yml, anomaly_name=\"canonical_latency_p95\"); a filled marker under \"anomalies\" means AnomalyDetected fired.",
+      "description": "Filtered by $operation (default All, aggregated). Selecting a specific operation also drops the shaded band and dashed \"level\" line below, since rules/saafe/anomaly.yml's baseline for this p95 query (anomaly_name=\"canonical_latency_p95\") isn't scoped by operation; a filled marker under \"anomalies\" means AnomalyDetected fired.",
       "datasource": {
         "type": "prometheus",
         "uid": "webstore-metrics"
@@ -535,7 +535,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"ms\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))) / 1000)\nor\n(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"s\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"inbound\"}[5m]))))",
+          "expr": "(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"ms\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))) / 1000)\nor\n(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"s\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))))",
           "legendFormat": "p95",
           "range": true,
           "instant": false,
@@ -547,7 +547,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_lower_band",
           "range": true,
           "instant": false,
@@ -559,7 +559,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\"}[2m])",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_upper_band",
           "range": true,
           "instant": false,
@@ -571,7 +571,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "expr": "ALERTS{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
           "legendFormat": "anomalies",
           "range": true,
           "instant": false,
@@ -583,7 +583,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "anomaly:level{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\"}",
+          "expr": "anomaly:level{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
           "legendFormat": "level",
           "range": true,
           "instant": false,
@@ -1136,6 +1136,7 @@
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "includeAll": true,
+        "allValue": ".*",
         "multi": true,
         "current": {
           "text": [
