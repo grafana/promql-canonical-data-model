@@ -1,12 +1,13 @@
 # The Canonical Data Model
 
 A small set of labels that every metric source in this demo gets enriched with, via
-plain Prometheus `metric_relabel_configs` — no new series, no new ingestion pipeline,
-just extra labels added to samples you already scrape. Every raw label the source
-originally had (`service_name`, `span_kind`, `envoy_cluster_name`, `otel_scope_name`,
-...) stays right where it was — nothing here ever drops or overwrites the original
-data, only adds to it. See the root [README](../README.md) for the overall architecture
-and why relabeling (not an OTel-side transform) is the mechanism.
+plain Prometheus `metric_relabel_configs`/`receive_relabel_configs` — no new series, no
+new ingestion pipeline, just extra labels added to samples that already exist. Every
+raw label the source originally had (`service_name`, `span_kind`, `envoy_cluster_name`,
+`otel_scope_name`, ...) stays right where it was — nothing here ever drops or
+overwrites the original data, only adds to it. See the root [README](../README.md) for
+the overall architecture and why relabeling (not an OTel-side transform) is the
+mechanism.
 
 ## `cdm_metric`: enrichment, not a rename
 
@@ -70,12 +71,12 @@ opt this model *out* of that convention for no benefit.
 
 ## Why these labels and not more
 
-This is deliberately a small, OTel-semantic-convention-first set (see the root README's
-talk context). It does **not** yet include things like entity-relationship/service-graph
-edges or rootcause/entity-graph labels — those are real, useful ideas, but adding them
-before the OTel-native layer is solid would be designing in the wrong order. They're
-natural extensions once you need them for your own organization, not because the demo
-needs to prove it can do everything at once.
+This is deliberately a small, OTel-semantic-convention-first set. It does **not** yet
+include things like entity-relationship/service-graph edges or rootcause/entity-graph
+labels — those are real, useful ideas, but adding them before the OTel-native layer is
+solid would be designing in the wrong order. They're natural extensions once you need
+them for your own organization, not because the demo needs to prove it can do
+everything at once.
 
 ## Schema vs. mapping — two separate things on purpose
 
@@ -88,11 +89,11 @@ useful as documentation, and as something a validator or another tool could chec
 label values against, without pulling in anything about how the mapping happens.
 
 The *mapping* — how each source's raw series gets enriched with these labels — is
-hand-written `metric_relabel_configs` directly in
+hand-written `metric_relabel_configs`/`receive_relabel_configs` directly in
 [`demo/src/prometheus/prometheus-config.yaml`](../demo/src/prometheus/prometheus-config.yaml).
 There's no generator or template standing between the schema and the rules: Prometheus
 has no native way to `include` a separate relabeling file, and a source-mapping DSL
-compiling down to `metric_relabel_configs` was tried and dropped here — the regex
+compiling down to these configs was tried and dropped here — the regex
 patterns involved (mostly "gate on a guard label, then override a default with
 progressively more specific matches") aren't complex enough to justify a code-generation
 step and the Go toolchain dependency it required. Adding a new source means writing its
@@ -117,9 +118,10 @@ just documented in a comment. Five types are mapped:
 - **OTel RPC semantic-convention metrics** (`cdm_source="otel_semconv"`) —
   `rpc_client_duration_milliseconds` / `rpc_server_duration_milliseconds`, emitted
   *directly* by RPC client/server instrumentation libraries, not derived from spans. A
-  genuinely different source from spanmetrics sharing the same scrape endpoint,
-  confirmed present from both a Java and a Go SDK in this demo, mapped with the exact
-  same `cdm_*` labels — the point of defining the schema independent of any one source.
+  genuinely different source from spanmetrics sharing the same OTLP push path through
+  the collector, confirmed present from both a Java and a Go SDK in this demo, mapped
+  with the exact same `cdm_*` labels — the point of defining the schema independent of
+  any one source.
 - **Grafana's own HTTP metrics** (`grafana_http_request_duration_seconds`) — classic
   Prometheus client-library instrumentation, not OTel-derived at all: no resource
   attributes, no `service_name` of its own. `service` comes from `instance`, same
@@ -131,17 +133,6 @@ just documented in a comment. Five types are mapped:
   same way. Unlike Grafana, there's a dedicated requests-total counter rather than a
   histogram `_count` to repurpose — the same canonical shape, reached two different
   ways depending on what the source actually exposes.
-
-## Push ingestion (experimental)
-
-This demo scrapes rather than pushes because stock Prometheus only ever runs relabeling
-from the scrape loop — push ingestion (remote-write, OTLP) has no relabeling stage at all.
-[prometheus/prometheus#19675](https://github.com/prometheus/prometheus/pull/19675),
-open and unmerged, adds `receive_relabel_configs` to close that gap: relabeling applied to
-remote-write/OTLP-ingested samples before storage. `prometheus-config.yaml`'s
-`receive_relabel_configs` block and `otelcol-config.yml`'s `metrics/push` pipeline
-validate it against this demo's own spanmetrics rules — same rules, same output as the
-scrape path, confirmed live, only *where* they run changes.
 
 ## Known v1 gaps
 

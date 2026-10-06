@@ -1,95 +1,42 @@
-PromCon 2026: Canonical Data Model
-----------------------------------
+PromQL Canonical Data Model
+----------------------------
 
-## Why this exists
+## Overview
 
-Most organizations run more than one way of describing the same thing: a Prometheus SDK
-here, OpenTelemetry there, a service mesh's own naming scheme, spans turned into RED
-metrics by a span-to-metrics pipeline. Each convention is reasonable on its own — the
-problem shows up a layer up, where dashboards, alerting, anomaly detection, and SLOs all
-want to ask the same questions (what's the request rate? the error ratio? the latency?)
-and get a different answer depending on which naming convention the underlying metric
-happens to use. Multiply that by every service and every source, and the generic
-capabilities on top either get rebuilt per source, or never get built at all.
+Prometheus metrics arrive from multiple sources, each using a different technology and
+data model:
 
-A **canonical data model** is the fix: a small, fixed set of labels that every source
-gets mapped into once, so dashboards, alerting, anomaly detection, and
-[SAAFE](https://github.com/grafana/saafe-model) insights only need to be built once too
-— against the model, not against each source.
+- Prometheus client libraries
+- OpenTelemetry instrumentation
+- service mesh naming conventions
+- span-to-metrics pipelines deriving RED metrics from traces
 
-This repo is the third installment of a multi-year series exploring how far stock
-Prometheus's own rule engines can be pushed to solve exactly this kind of problem,
-without standing up a new system:
+Left alone, that proliferates into separate dashboards, alerts, and ad-hoc queries per
+source and per service, each answering the same basic question (what's the request
+rate? the error ratio? the latency?) in its own way. That proliferation prevents
+building generic features as part of a centralized observability platform.
 
-| PromCon | What it pushed | Rule engine |
-|---|---|---|
-| 2024 — [Anomaly Detection](https://github.com/grafana/promql-anomaly-detection) | Statistical baselines, in PromQL | Recording rules |
-| 2025 — [SAAFE](https://github.com/grafana/saafe-model) | An opinionated alert taxonomy | Alerting rules |
-| 2026 — Canonical Data Model (this repo) | A shared label schema across sources | **Relabeling rules** |
+This repo addresses this problem with a **canonical data model**: a small, fixed set of
+labels every source gets mapped into once, using nothing more than stock Prometheus
+`metric_relabel_configs`/`receive_relabel_configs`. Alerts, dashboards, and other
+generic tooling are then written against the model instead of each source's own naming
+— adding a new source means mapping it into the model once, not touching anything
+downstream.
 
-The insight that makes this one work: Prometheus stores a series' metric name as nothing
-more than its `__name__` label internally — `my_requests_total{}` and
-`{__name__="my_requests_total"}` are the same series. Because of that, relabeling rules
-can match and enrich *any* series by its existing labels, `__name__` included, with no
-new ingestion path and no new system to run. And because relabeling rewrites labels on
-series that already exist rather than creating new ones, it comes for free,
-cardinality-wise. Three properties fall out of taking that seriously:
+Three principles guide the mapping:
 
 - **Embrace the differences.** Accept each source's own naming convention rather than
   forcing one schema at the point of instrumentation — harmonize centrally instead.
-- **Non-destructive, full fidelity.** The source's own labels and `__name__` are
+- **Non-destructive, full fidelity.** A source's own labels and `__name__` are
   preserved, never dropped or rewritten away.
 - **Zero additional cardinality.** Enrichment only adds labels to series that already
   exist; it never materializes new ones.
 
-One gap surfaced while building this: stock Prometheus only ever runs relabeling from
-the scrape loop, so anything arriving by push (remote-write, OTLP) — which is how most
-modern pipelines, including the upstream OpenTelemetry Demo, actually ingest — gets none
-of this. The "Architecture" section below covers the experimental patch this repo carries
-to close that gap.
-
-See [`model/README.md`](model/README.md) for how these principles turn into the actual
-label schema, and the reasoning behind each label.
-
-## What's here
-
-This repo starts from [`grafana/saafe-model`](https://github.com/grafana/saafe-model) —
-the OpenTelemetry Demo app, Prometheus, Grafana, the SAAFE alert taxonomy, and the
-anomaly-detection recording rules — and adds the canonical data model on top, repointing
-the existing SAAFE alerts and anomaly-detection rules to consume it.
-
-The payoff: the same alert and recording-rule definitions now work identically no matter
-which naming convention the underlying series came from — OTel spanmetrics, Envoy's admin
-stats, OTel's own RPC instrumentation, or classic Prometheus client-library metrics. Each
-source type is mapped with a rule generic to that *type* of source — see
-`model/README.md`'s "Source types, not source instances".
-
-See [`model/README.md`](model/README.md) for the label schema itself and the reasoning
-behind each label.
-
-## Architecture
-
-![Architecture: OTel Demo services and Envoy/Grafana/Prometheus metrics flow into Prometheus via push (OTLP) and scrape respectively, enriched by metric_relabel_configs and receive_relabel_configs, then consumed by the generic dashboard, anomaly detection, and SAAFE insights](docs/sources/assets/architecture.png)
-
-Envoy's admin stats and the observability stack's own metrics (Grafana, Prometheus) are
-scraped directly, enriched with stock `metric_relabel_configs`. Everything from the OTel
-Collector (the spanmetrics connector, OTel's own RPC semantic-convention metrics, and the
-`docker_stats`/`redis`/`httpcheck` receivers) arrives by OTLP push instead, the same way
-the upstream OpenTelemetry Demo already ingests it. Stock Prometheus has no relabeling
-stage on that path, so `receive_relabel_configs` fills the gap — an experimental addition
-to Prometheus ([prometheus/prometheus#19675](https://github.com/prometheus/prometheus/pull/19675),
-open and unmerged) that applies the exact same relabeling rules to push-ingested samples
-before they're stored. See [`model/README.md`](model/README.md)'s "Push ingestion"
-section for the details. Either way, consumers query `{cdm_metric=...}` directly — no
-recording-rule layer in between.
-
-The canonical model is defined formally, independent of the mapping, in
-[`model/schema.json`](model/schema.json) (a [JSON Schema](https://json-schema.org/) —
-which labels exist, what values they take, why). The mapping itself — how each source's
-raw series gets enriched with those labels — is hand-written `metric_relabel_configs`/
-`receive_relabel_configs` directly in `demo/src/prometheus/prometheus-config.yaml`; a
-schema-to-rules generator was tried and dropped (see [`model/README.md`](model/README.md))
-once the remaining regex patterns turned out not to be complex enough to justify it.
+Built on top of [`grafana/saafe-model`](https://github.com/grafana/saafe-model) (the
+OpenTelemetry Demo, Prometheus, Grafana, the SAAFE alert taxonomy, and the
+anomaly-detection recording rules), this repo adds the canonical model on top and
+repoints the existing SAAFE alerts and anomaly rules to consume it — the same rule
+definitions, now source-agnostic.
 
 ## Quick start
 
@@ -104,13 +51,63 @@ Requires Docker. Then:
   the generic per-service RED dashboard, **SAAFE** for the Assertions dashboard, and
   **Node Exporter** for node-level saturation.
 - `http://localhost:8080/prometheus/` — Prometheus, to query `{cdm_metric="requests_total"}` /
-  `{cdm_metric="request_duration"}` directly — see [`model/README.md`](model/README.md)
-  for why it's a label selector rather than a metric name.
+  `{cdm_metric="request_duration"}` directly — see "Concepts" below for why it's a
+  label selector rather than a metric name.
 - `http://localhost:8080/loadgen/` — the load generator, to drive traffic.
 
 ![Canonical Data Model — RED dashboard: inbound request rate/error ratio/latency with anomaly-detection bands, a request-rate-by-operation breakdown, outbound request rate/error ratio/latency broken out by destination, and a SAAFE assertions timeline, all for one selected service/operation/source](docs/sources/assets/red-dashboard.png)
 
 `make stop` (from `demo/`) tears everything down.
+
+## Concepts
+
+**`__name__` is just a label.** `my_requests_total{}` and
+`{__name__="my_requests_total"}` are the same series — the metric name is stored as an
+ordinary label, not special syntax. That means a query can skip the name entirely and
+match on labels alone, like `{cdm_metric="requests_total"}` does throughout this repo,
+and a relabeling rule can match on `__name__` itself exactly like any other label.
+
+**Enrichment, not a rename.** `__name__` is left exactly as each source emits it — a
+`traces_span_metrics_calls_total` series stays named that, an
+`envoy_cluster_upstream_rq_xx` series stays named that. A new label, `cdm_metric`,
+carries the canonical identity instead.
+
+## The labels
+
+| Label | Values | Why |
+|---|---|---|
+| `cdm_metric` | `requests_total`, `request_duration` | The canonical identity to query by, in place of a renamed metric name. See "Enrichment, not a rename" above. |
+| `cdm_source` | `spanmetrics`, `otel_semconv`, `envoy`, `grafana`, `prometheus` | Which source type produced this series — one value per relabeling section in `prometheus-config.yaml`. |
+| `service` | free text | The entity this series is about. Renamed from whatever the source calls it (`service_name` for spanmetrics, a static value derived from `instance` for Envoy/Grafana). |
+| `cdm_request_type` | `http`, `rpc`, `db`, `internal` | *What kind* of request. Derived from *which* semantic-convention attribute is present on the source, not from a fixed source-specific value — this is what lets the same query work across HTTP, gRPC and future sources without listing them all. |
+| `cdm_request_context` | free text | *Which* request/operation — an HTTP route, an RPC method, a DB operation, falling back to whatever the source's own operation identifier is (e.g. a span name) when nothing more specific exists. |
+| `cdm_direction` | `inbound`, `outbound` | Which side of a call this series represents, from OTel's `span.kind` (SERVER/CONSUMER vs. CLIENT/PRODUCER) or the source's equivalent. Without this, summing a service's inbound and outbound calls together double-counts the same logical request from both ends. |
+| `cdm_status` | `ok`, `error` | Collapsed from whatever the source's own error signal is (span status, HTTP status class, response code class, ...). |
+| `cdm_unit` | `ms`, `s`, ... | The unit a `request_duration` series' value is actually in. Not normalized away — relabeling can rewrite labels but never a sample's *value*, so a source reporting milliseconds can't be silently forced to look like seconds. |
+
+The formal version of this table, independent of any one source, is
+[`model/schema.json`](model/schema.json) (a [JSON Schema](https://json-schema.org/));
+[`model/README.md`](model/README.md) is its full prose reference, including the known
+v1 gaps and exactly how each source type gets mapped.
+
+### How to use them
+
+A few representative queries against the live demo (see Quick start):
+
+```promql
+# Request rate for checkoutservice's inbound calls, across every source that reports them
+sum by (cdm_source) (rate({cdm_metric="requests_total", service="checkoutservice", cdm_direction="inbound"}[5m]))
+
+# Error ratio, grouped by source to avoid double-counting the same call reported twice
+# (see "Lessons learned" below)
+sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
+/
+sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
+
+# p95 latency, accounting for cdm_unit explicitly rather than mixing differently-scaled
+# buckets into one histogram_quantile() call
+histogram_quantile(0.95, sum by (le) (rate({cdm_metric="request_duration", le=~".+", cdm_unit="ms", service="checkoutservice"}[5m]))) / 1000
+```
 
 ## Lessons learned
 
@@ -137,13 +134,36 @@ real deployment, beyond what's in this demo:
   series fails ingestion for every series in that scrape, not just the offending one —
   map only the metric families you actually need rather than everything a source exposes.
 
+## Architecture
+
+![Architecture: OTel Demo services and Envoy/Grafana/Prometheus metrics flow into Prometheus via push (OTLP) and scrape respectively, enriched by metric_relabel_configs and receive_relabel_configs, then consumed by the generic dashboard, anomaly detection, and SAAFE insights](docs/sources/assets/architecture.png)
+
+Envoy's admin stats and the observability stack's own metrics (Grafana, Prometheus) are
+scraped directly, enriched with stock `metric_relabel_configs`. Everything from the OTel
+Collector (the spanmetrics connector, OTel's own RPC semantic-convention metrics, and the
+`docker_stats`/`redis`/`httpcheck` receivers) arrives by OTLP push instead, the same way
+the upstream OpenTelemetry Demo already ingests it. Stock Prometheus has no relabeling
+stage on that path, so `receive_relabel_configs` fills the gap — an experimental addition
+to Prometheus ([prometheus/prometheus#19675](https://github.com/prometheus/prometheus/pull/19675),
+open and unmerged) that applies the exact same relabeling rules to push-ingested samples
+before they're stored; `demo/src/prometheus/Dockerfile.pr19675` builds Prometheus from
+the PR's branch to run it. Either way, consumers query `{cdm_metric=...}` directly — no
+recording-rule layer in between.
+
+The mapping itself — how each source's raw series gets enriched with the labels in
+[`model/schema.json`](model/schema.json) — is hand-written `metric_relabel_configs`/
+`receive_relabel_configs` directly in `demo/src/prometheus/prometheus-config.yaml`; a
+schema-to-rules generator was tried and dropped (see [`model/README.md`](model/README.md))
+once the remaining regex patterns turned out not to be complex enough to justify it.
+
 ## Repository layout
 
 - `demo/` — the runnable stack (OTel Demo services, Collector, Prometheus, Grafana),
   from `saafe-model`.
 - `model/` — the canonical data model: the formal schema (`schema.json`) and its prose
-  reference (`README.md`). No mapping logic and no recording rules live here — the
-  mapping is hand-written `metric_relabel_configs`/`receive_relabel_configs` in
+  reference (`README.md`), including the known v1 gaps and how each source type is
+  mapped. No mapping logic and no recording rules live here — the mapping is hand-written
+  `metric_relabel_configs`/`receive_relabel_configs` in
   `demo/src/prometheus/prometheus-config.yaml`, and consumers query
   `{cdm_metric=...}` inline.
 - `rules/saafe/`, `rules/anomaly/` — the SAAFE alert taxonomy and the
