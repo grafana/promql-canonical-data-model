@@ -162,6 +162,13 @@ receive_relabel_configs:
   regex: '(.+)'
   target_label: service
   replacement: '${1}'
+# Prometheus folds service.name/service.namespace into `job` for every OTLP
+# resource series, target_info included -- there's no separate service_name label
+# to key off here, so service comes from `job` instead.
+- source_labels: [__name__, job]
+  regex: '(?:traces_)?target_info;(?:[^/]+/)?([^/]+)'
+  target_label: service
+  replacement: '${1}'
 - source_labels: [service_name]
   regex: '.+'
   target_label: cdm_source
