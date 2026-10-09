@@ -20,7 +20,7 @@ Canonical identity is carried by a new label, `cdm_metric`, instead:
 | `requests_total` | One request/call, however the source defines "a call" (a completed span, a proxied HTTP request, ...) |
 | `request_duration` | How long a request took |
 
-Query it with a name-less selector — `{cdm_metric="requests_total", service=~"..."}`.
+Query it with a name-less selector — `{cdm_metric="requests_total", cdm_service=~"..."}`.
 This was a deliberate choice over renaming
 `__name__` to something like `cdm_requests_total`: renaming is a destructive
 transformation (the source's own metric name is gone, unrecoverable, and two sources
@@ -49,19 +49,18 @@ framework, dashboards) query `{cdm_metric=...}` directly with inline
 The formal version of this table is [`schema.json`](schema.json) — a JSON Schema,
 independent of how any source maps into it. This section is its prose form.
 
-`service` and `env` are deliberately *not* `cdm_`-prefixed, unlike everything else here.
-The prefix's job is to mark labels this model *invents* — new classification vocabulary
-a source doesn't natively have (`cdm_request_type`, `cdm_direction`, ...). `service` and
-`env` aren't inventions; they're near-universal ecosystem conventions already (OTel's
-`service.name`/`deployment.environment.name`, Grafana/Loki/Tempo cross-signal
-correlation, most APM tooling) that already expect a bare label — prefixing them would
-opt this model *out* of that convention for no benefit.
+`env` is deliberately *not* `cdm_`-prefixed, unlike everything else here. The prefix's
+job is to mark labels this model *invents* — new classification vocabulary a source
+doesn't natively have (`cdm_request_type`, `cdm_direction`, ...). `env` isn't an
+invention; it's a near-universal ecosystem convention already (OTel's
+`deployment.environment.name`, Grafana/Loki/Tempo cross-signal correlation, most APM
+tooling) that already expects a bare label.
 
 | Label | Values | Why |
 |---|---|---|
 | `cdm_metric` | `requests_total`, `request_duration` | The canonical identity to query by, in place of a renamed metric name. See above. |
 | `cdm_source` | `spanmetrics`, `otel_semconv`, `envoy`, `grafana`, `prometheus` | Which source type produced this series — one value per relabeling section in `prometheus-config.yaml`. Makes the source type queryable/selectable instead of only living in a comment. |
-| `service` | free text | The entity this series is about. Renamed from whatever the source calls it (`service_name` for spanmetrics, a static value derived from `instance` for Envoy/Grafana). |
+| `cdm_service` | free text | The entity this series is about. Renamed from whatever the source calls it (`service_name` for spanmetrics, a static value derived from `instance` for Envoy/Grafana). |
 | `env` | free text | Deployment environment, from `deployment.environment.name` (or the older `deployment.environment`). Not populated in this demo (single environment) but included so the schema is complete for real deployments. |
 | `cdm_request_type` | `http`, `rpc`, `db`, `internal` | *What kind* of request. Derived from *which* semantic-convention attribute is present on the source, not from a fixed source-specific value — this is what lets the same query work across HTTP, gRPC and future sources without listing them all. |
 | `cdm_request_context` | free text | *Which* request/operation — an HTTP route, an RPC method, a DB operation, falling back to whatever the source's own operation identifier is (e.g. a span name) when nothing more specific exists. |
@@ -112,8 +111,8 @@ just documented in a comment. Five types are mapped:
 
 - **OTel spanmetrics** (traces → RED metrics via the connector) — HTTP/RPC/DB, keyed on
   `service_name` being present.
-- **Envoy admin stats** — a service-mesh-adjacent naming convention. `service` comes
-  from the scrape target's own `instance`, not a hardcoded name, so the rule works for
+- **Envoy admin stats** — a service-mesh-adjacent naming convention. `cdm_service`
+  comes from the scrape target's own `instance`, not a hardcoded name, so the rule works for
   any Envoy deployment scraped this way, not just this demo's one proxy.
 - **OTel RPC semantic-convention metrics** (`cdm_source="otel_semconv"`) —
   `rpc_client_duration_milliseconds` / `rpc_server_duration_milliseconds`, emitted
@@ -124,13 +123,13 @@ just documented in a comment. Five types are mapped:
   any one source.
 - **Grafana's own HTTP metrics** (`grafana_http_request_duration_seconds`) — classic
   Prometheus client-library instrumentation, not OTel-derived at all: no resource
-  attributes, no `service_name` of its own. `service` comes from `instance`, same
+  attributes, no `service_name` of its own. `cdm_service` comes from `instance`, same
   technique as Envoy. The observability stack's own tooling is a source type like any
   other, not a special case — and it's the one native-seconds source in this demo,
   where every other source reports `ms`, a live example of why `cdm_unit` exists.
 - **Prometheus's own HTTP metrics** (`prometheus_http_requests_total`) — the same
-  classic client-library convention as Grafana, `service` derived from `instance` the
-  same way. Unlike Grafana, there's a dedicated requests-total counter rather than a
+  classic client-library convention as Grafana, `cdm_service` derived from `instance`
+  the same way. Unlike Grafana, there's a dedicated requests-total counter rather than a
   histogram `_count` to repurpose — the same canonical shape, reached two different
   ways depending on what the source actually exposes.
 

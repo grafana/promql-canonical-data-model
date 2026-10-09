@@ -6,7 +6,7 @@
   "type": "object",
   "properties": {
     "cdm_metric": {
-      "description": "The canonical identity to query by, in place of a renamed metric name (__name__ is left exactly as the source emits it -- see ../README.md's 'enrichment, not a rename'). Query with a name-less selector, e.g. {cdm_metric=\"requests_total\", service=~\"...\"}.",
+      "description": "The canonical identity to query by, in place of a renamed metric name (__name__ is left exactly as the source emits it -- see ../README.md's 'enrichment, not a rename'). Query with a name-less selector, e.g. {cdm_metric=\"requests_total\", cdm_service=~\"...\"}.",
       "enum": ["requests_total", "request_duration"]
     },
     "cdm_source": {
@@ -14,12 +14,12 @@
       "examples": ["spanmetrics", "otel_semconv", "envoy", "grafana", "prometheus"],
       "type": "string"
     },
-    "service": {
-      "description": "The entity this series is about. Not cdm_-prefixed: it's a near-universal ecosystem convention (OTel service.name, Grafana/Loki/Tempo cross-signal correlation), not vocabulary this model invents.",
+    "cdm_service": {
+      "description": "The entity this series is about. Renamed from whatever the source calls it (service_name for spanmetrics, a static value derived from instance for Envoy/Grafana).",
       "type": "string"
     },
     "env": {
-      "description": "Deployment environment, from deployment.environment.name (or the older deployment.environment). Not cdm_-prefixed for the same reason as service. Not populated in this demo (single environment).",
+      "description": "Deployment environment, from deployment.environment.name (or the older deployment.environment). Not cdm_-prefixed: deployment.environment.name is already a near-universal ecosystem convention. Not populated in this demo (single environment).",
       "type": "string"
     },
     "cdm_request_type": {
@@ -44,5 +44,5 @@
       "type": "string"
     }
   },
-  "required": ["cdm_metric", "service"]
+  "required": ["cdm_metric", "cdm_service"]
 }
