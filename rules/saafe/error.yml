@@ -20,9 +20,9 @@ groups:
 
     - alert: HighErrorRate
       expr: |-
-        (sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
+        (sum by (cdm_service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
         /
-        sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m])))
+        sum by (cdm_service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m])))
         > 0.05
       for: 10m
       labels:

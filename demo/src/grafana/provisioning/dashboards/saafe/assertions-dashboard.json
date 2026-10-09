@@ -179,7 +179,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by (saafe_severity) (ALERTS{job=~\"$job\", service=~\"$service\", saafe_severity=\"critical\", alertstate=\"firing\", saafe_category=~\"$category\"})",
+          "expr": "sum by (saafe_severity) (ALERTS{job=~\"$job\", cdm_service=~\"$service\", saafe_severity=\"critical\", alertstate=\"firing\", saafe_category=~\"$category\"})",
           "legendFormat": "{{saafe_severity}}",
           "range": true,
           "refId": "A"
@@ -190,7 +190,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (saafe_severity) (ALERTS{job=~\"$job\", service=~\"$service\", saafe_severity=\"warning\", alertstate=\"firing\", saafe_category=~\"$category\"})",
+          "expr": "sum by (saafe_severity) (ALERTS{job=~\"$job\", cdm_service=~\"$service\", saafe_severity=\"warning\", alertstate=\"firing\", saafe_category=~\"$category\"})",
           "hide": false,
           "legendFormat": "{{saafe_severity}}",
           "range": true,
@@ -202,7 +202,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (saafe_severity) (ALERTS{job=~\"$job\", service=~\"$service\", saafe_severity=\"info\", alertstate=\"firing\", saafe_category=~\"$category\"})",
+          "expr": "sum by (saafe_severity) (ALERTS{job=~\"$job\", cdm_service=~\"$service\", saafe_severity=\"info\", alertstate=\"firing\", saafe_category=~\"$category\"})",
           "hide": false,
           "legendFormat": "{{saafe_severity}}",
           "range": true,
@@ -295,10 +295,10 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (job, service, saafe_severity) (count_over_time(ALERTS{job=~\"$job\", service=~\"$service\", saafe_category=~\"$category\",alertstate=\"firing\"}[$__range])) * on (saafe_severity) group_left saafe:scoring:weight",
+          "expr": "sum by (job, cdm_service, saafe_severity) (count_over_time(ALERTS{job=~\"$job\", cdm_service=~\"$service\", saafe_category=~\"$category\",alertstate=\"firing\"}[$__range])) * on (saafe_severity) group_left saafe:scoring:weight",
           "format": "table",
           "instant": false,
-          "legendFormat": "{{job}}{{service}} - {{saafe_category}}",
+          "legendFormat": "{{job}}{{cdm_service}} - {{saafe_category}}",
           "range": true,
           "refId": "A"
         }
@@ -518,7 +518,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (job, service, alertname, saafe_severity) (ALERTS{job=~\"$job\", service=~\"$service\", saafe_category=~\"$category\", saafe_severity=\"info\",alertstate=\"firing\"})",
+          "expr": "sum by (job, cdm_service, alertname, saafe_severity) (ALERTS{job=~\"$job\", cdm_service=~\"$service\", saafe_category=~\"$category\", saafe_severity=\"info\",alertstate=\"firing\"})",
           "legendFormat": "{{alertname}}",
           "range": true,
           "refId": "A"
@@ -529,7 +529,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (job, service, alertname, saafe_severity) (ALERTS{job=~\"$job\", service=~\"$service\", saafe_category=~\"$category\", saafe_severity=\"warning\",alertstate=\"firing\"})",
+          "expr": "sum by (job, cdm_service, alertname, saafe_severity) (ALERTS{job=~\"$job\", cdm_service=~\"$service\", saafe_category=~\"$category\", saafe_severity=\"warning\",alertstate=\"firing\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "{{alertname}}",
@@ -542,7 +542,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (job, service, alertname, saafe_severity) (ALERTS{job=~\"$job\", service=~\"$service\", saafe_category=~\"$category\", saafe_severity=\"critical\",alertstate=\"firing\"})",
+          "expr": "sum by (job, cdm_service, alertname, saafe_severity) (ALERTS{job=~\"$job\", cdm_service=~\"$service\", saafe_category=~\"$category\", saafe_severity=\"critical\",alertstate=\"firing\"})",
           "hide": false,
           "instant": false,
           "legendFormat": "{{alertname}}",
@@ -594,7 +594,7 @@
             "$__all"
           ]
         },
-        "definition": "label_values(ALERTS{alertstate=\"firing\"},service)",
+        "definition": "label_values(ALERTS{alertstate=\"firing\"},cdm_service)",
         "includeAll": true,
         "label": "service",
         "multi": true,
@@ -602,7 +602,7 @@
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(ALERTS{alertstate=\"firing\"},service)",
+          "query": "label_values(ALERTS{alertstate=\"firing\"},cdm_service)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,

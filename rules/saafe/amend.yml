@@ -3,15 +3,16 @@ groups:
     rules:
 
     # track otel service versions
-    # `service` is carried straight through here rather than dropped by the group-by:
-    # target_info promotes it natively from the OTel resource (a different label
-    # convention than spanmetrics' service_name -- see model/README.md), so no
-    # relabeling is needed to get it. Series without a service label (exporter/
-    # runtime info below) simply group under service="", which cdm-scoped consumers
-    # like the Canonical Data Model dashboard's Insights panel naturally never match.
+    # `cdm_service` is carried straight through here rather than dropped by the
+    # group-by: target_info promotes it natively from the OTel resource (a different
+    # label convention than spanmetrics' service_name -- see model/README.md), so no
+    # relabeling is needed to get it. Series without a `cdm_service` label (exporter/
+    # runtime info below) simply group under cdm_service="", which cdm-scoped
+    # consumers like the Canonical Data Model dashboard's Insights panel naturally
+    # never match.
     - record: saafe:version:info
       expr: |-
-        group by (job, service, version) (
+        group by (job, cdm_service, version) (
           label_replace(
               traces_target_info{job!="", service_version!=""}
                 or
@@ -25,7 +26,7 @@ groups:
     # track prometheus exporter versions
     - record: saafe:version:info
       expr: |-
-        group by (job, service, version, saafe_source) (
+        group by (job, cdm_service, version, saafe_source) (
           label_replace({__name__=~"[A-Za-z_]*exporter_build_info", version != ""}, "saafe_source", "$1", "__name__", "([A-Za-z_]*exporter)_build_info")
         )
       labels:
@@ -33,28 +34,28 @@ groups:
 
     # track runtime version changes
     - record: saafe:version:info
-      expr: group by (job, service, version) (go_info)
+      expr: group by (job, cdm_service, version) (go_info)
       labels:
         saafe_version_type: runtime
         saafe_source: golang
 
     - record: saafe:version:info
-      expr: group by (job, service, version) (python_info)
+      expr: group by (job, cdm_service, version) (python_info)
       labels:
         saafe_version_type: runtime
         saafe_source: python
 
     - record: saafe:version:info
-      expr: group by (job, service, version) (jvm_info)
+      expr: group by (job, cdm_service, version) (jvm_info)
       labels:
         saafe_version_type: runtime
         saafe_source: jvm
 
     - record: saafe:release:versions
       expr: |
-        count by(job, service, saafe_version_type, saafe_source)(
+        count by(job, cdm_service, saafe_version_type, saafe_source)(
           count_over_time(
-            count by(job, service, version, saafe_version_type, saafe_source)(
+            count by(job, cdm_service, version, saafe_version_type, saafe_source)(
               saafe:version:info
             )[5m:1m]
           )

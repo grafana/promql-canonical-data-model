@@ -1,6 +1,6 @@
 {
   "title": "Canonical Data Model — RED",
-  "description": "Generic RED (request rate / errors / duration) for one selected service, source, and direction at a time. $source forces picking exactly one source type (spanmetrics / otel_semconv / envoy / grafana / prometheus) rather than 'All': the same underlying gRPC call can be reported by both the spanmetrics connector and native OTel RPC instrumentation simultaneously, so mixing sources risks double-counting the same request, the same class of issue as the frontend's overlapping GET/GET-with-route spans. The three inbound RED panels are aggregated (grouped by service/source only, no per-operation breakdown); a separate panel below breaks inbound traffic down by operation (via $operation), cdm_request_context, with cdm_request_type shown alongside it in the legend rather than as a separate filter. The three outbound RED panels are grouped by destination directly (cdm_request_context, cdm_request_type) instead of aggregating across destinations, so a single upstream causing errors or latency is visible without a separate panel. All three inbound panels overlay the anomaly-detection framework's bands and insights (as in the Anomalies dashboards), computed by rules/saafe/anomaly.yml's canonical_requests/canonical_error_ratio/canonical_latency_p95 rules -- generic across sources via group-by (service, cdm_source), not a filter on one. Latency shows p95 only, matching the anomaly rule it's overlaid with, normalized to seconds at query time: cdm_unit can't be converted by relabeling (rescaling a histogram bucket boundary needs arithmetic, not a label rewrite), so the panel computes the quantile separately per cdm_unit and scales the ms branch before combining -- the anomaly rule does the same. Requests/errors/duration are computed inline directly from series enriched with cdm_metric=\"requests_total\"/\"request_duration\" (no recording-rule layer for the canonical model itself, __name__ stays each source's own metric name). Note: request_type=\"internal\" series (no clear inbound/outbound side) don't appear in either row by design. A final Insights row (same state-timeline pattern as the Assertions dashboard) shows firing SAAFE alerts scoped to the selected $service; alerts that carry a cdm_source label are further scoped to the selected $source, while alerts without one (VersionUpdated, InstanceDown, InstanceRestarted, the saturation alerts) always show regardless of $source.",
+  "description": "Generic RED (request rate / errors / duration) for one selected service, source, and direction at a time. $source forces picking exactly one source type (spanmetrics / otel_semconv / envoy / grafana / prometheus) rather than 'All': the same underlying gRPC call can be reported by both the spanmetrics connector and native OTel RPC instrumentation simultaneously, so mixing sources risks double-counting the same request, the same class of issue as the frontend's overlapping GET/GET-with-route spans. The three inbound RED panels are aggregated (grouped by service/source only, no per-operation breakdown); a separate panel below breaks inbound traffic down by operation (via $operation), cdm_request_context, with cdm_request_type shown alongside it in the legend rather than as a separate filter. The three outbound RED panels are grouped by destination directly (cdm_request_context, cdm_request_type) instead of aggregating across destinations, so a single upstream causing errors or latency is visible without a separate panel. All three inbound panels overlay the anomaly-detection framework's bands and insights (as in the Anomalies dashboards), computed by rules/saafe/anomaly.yml's canonical_requests/canonical_error_ratio/canonical_latency_p95 rules -- generic across sources via group-by (cdm_service, cdm_source), not a filter on one. Latency shows p95 only, matching the anomaly rule it's overlaid with, normalized to seconds at query time: cdm_unit can't be converted by relabeling (rescaling a histogram bucket boundary needs arithmetic, not a label rewrite), so the panel computes the quantile separately per cdm_unit and scales the ms branch before combining -- the anomaly rule does the same. Requests/errors/duration are computed inline directly from series enriched with cdm_metric=\"requests_total\"/\"request_duration\" (no recording-rule layer for the canonical model itself, __name__ stays each source's own metric name). Note: request_type=\"internal\" series (no clear inbound/outbound side) don't appear in either row by design. A final Insights row (same state-timeline pattern as the Assertions dashboard) shows firing SAAFE alerts scoped to the selected $service; alerts that carry a cdm_source label are further scoped to the selected $source, while alerts without one (VersionUpdated, InstanceDown, InstanceRestarted, the saturation alerts) always show regardless of $source.",
   "uid": "cdm-red-saturation",
   "schemaVersion": 40,
   "version": 1,
@@ -59,7 +59,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
+          "expr": "sum by (cdm_service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
           "legendFormat": "request rate",
           "range": true,
           "instant": false,
@@ -71,7 +71,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_requests\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_lower_band",
           "range": true,
           "instant": false,
@@ -83,7 +83,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_requests\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_upper_band",
           "range": true,
           "instant": false,
@@ -95,7 +95,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "expr": "ALERTS{anomaly_name=\"canonical_requests\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
           "legendFormat": "anomalies",
           "range": true,
           "instant": false,
@@ -107,7 +107,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "anomaly:level{anomaly_name=\"canonical_requests\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
+          "expr": "anomaly:level{anomaly_name=\"canonical_requests\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
           "legendFormat": "level",
           "range": true,
           "instant": false,
@@ -297,7 +297,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_status=\"error\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))\n/\nsum by (service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
+          "expr": "sum by (cdm_service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_status=\"error\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))\n/\nsum by (cdm_service, cdm_source) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
           "legendFormat": "error ratio",
           "range": true,
           "instant": false,
@@ -309,7 +309,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_error_ratio\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_lower_band",
           "range": true,
           "instant": false,
@@ -321,7 +321,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_error_ratio\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_upper_band",
           "range": true,
           "instant": false,
@@ -333,7 +333,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "expr": "ALERTS{anomaly_name=\"canonical_error_ratio\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
           "legendFormat": "anomalies",
           "range": true,
           "instant": false,
@@ -345,7 +345,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "anomaly:level{anomaly_name=\"canonical_error_ratio\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
+          "expr": "anomaly:level{anomaly_name=\"canonical_error_ratio\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
           "legendFormat": "level",
           "range": true,
           "instant": false,
@@ -535,7 +535,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"ms\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))) / 1000)\nor\n(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"s\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))))",
+          "expr": "(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"ms\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))) / 1000)\nor\n(histogram_quantile(0.95, sum by (le) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"s\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))))",
           "legendFormat": "p95",
           "range": true,
           "instant": false,
@@ -547,7 +547,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
+          "expr": "last_over_time(anomaly:lower_band{anomaly_name=\"canonical_latency_p95\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_lower_band",
           "range": true,
           "instant": false,
@@ -559,7 +559,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
+          "expr": "last_over_time(anomaly:upper_band{anomaly_name=\"canonical_latency_p95\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}[2m])",
           "legendFormat": "anomaly_upper_band",
           "range": true,
           "instant": false,
@@ -571,7 +571,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
+          "expr": "ALERTS{anomaly_name=\"canonical_latency_p95\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\", alertstate=\"firing\", anomaly_select=\"1\"}",
           "legendFormat": "anomalies",
           "range": true,
           "instant": false,
@@ -583,7 +583,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "anomaly:level{anomaly_name=\"canonical_latency_p95\", service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
+          "expr": "anomaly:level{anomaly_name=\"canonical_latency_p95\", cdm_service=\"$service\", cdm_source=\"$source\", cdm_request_context=~\"$operation\"}",
           "legendFormat": "level",
           "range": true,
           "instant": false,
@@ -772,7 +772,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
+          "expr": "sum by (cdm_service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_request_context=~\"$operation\", cdm_direction=\"inbound\"}[5m]))",
           "legendFormat": "{{cdm_request_context}} ({{cdm_request_type}})",
           "range": true,
           "instant": false,
@@ -823,7 +823,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))",
+          "expr": "sum by (cdm_service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_direction=\"outbound\"}[5m]))",
           "legendFormat": "{{cdm_request_context}} ({{cdm_request_type}})",
           "range": true,
           "instant": false,
@@ -861,7 +861,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "sum by (service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_status=\"error\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))\n/\nsum by (service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))",
+          "expr": "sum by (cdm_service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_status=\"error\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_direction=\"outbound\"}[5m]))\n/\nsum by (cdm_service, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"requests_total\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_direction=\"outbound\"}[5m]))",
           "legendFormat": "{{cdm_request_context}} ({{cdm_request_type}})",
           "range": true,
           "instant": false,
@@ -899,7 +899,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, sum by (le, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"ms\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))) / 1000)\nor\n(histogram_quantile(0.95, sum by (le, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"s\", cdm_source=\"$source\", service=\"$service\", cdm_direction=\"outbound\"}[5m]))))",
+          "expr": "(histogram_quantile(0.95, sum by (le, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"ms\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_direction=\"outbound\"}[5m]))) / 1000)\nor\n(histogram_quantile(0.95, sum by (le, cdm_request_context, cdm_request_type) (rate({cdm_metric=\"request_duration\", le=~\".+\", cdm_unit=\"s\", cdm_source=\"$source\", cdm_service=\"$service\", cdm_direction=\"outbound\"}[5m]))))",
           "legendFormat": "{{cdm_request_context}} ({{cdm_request_type}})",
           "range": true,
           "instant": false,
@@ -933,7 +933,7 @@
       "id": 21,
       "type": "state-timeline",
       "title": "$service assertions",
-      "description": "Firing SAAFE alerts scoped to the selected service (same pattern as the Assertions dashboard's Timeline row). cdm_source=~\"^($source|)$\" scopes alerts that carry a cdm_source label (HighErrorRate, AnomalyDetected) to the selected $source, while still showing alerts with no cdm_source label at all (VersionUpdated, InstanceDown, InstanceRestarted, the saturation alerts) regardless of which $source is selected, since they have no source to filter by. Not a hardcoded alertname list: any alert whose series carries a service label matches. Queries ALERTS directly with no sum by(...) wrapper: several alerts can legitimately fire more than once concurrently under the same alertname, distinguished only by a label an aggregation would otherwise discard (HighErrorRate by cdm_source, AnomalyDetected by anomaly_name, VersionUpdated by saafe_version_type/saafe_source) -- aggregating would silently sum those into one row with value 2+, breaking the \"1\" -> \"firing\" mapping and hiding that two independent things are happening. Unaggregated, every concurrent instance gets its own row and is always exactly 1.",
+      "description": "Firing SAAFE alerts scoped to the selected service (same pattern as the Assertions dashboard's Timeline row). cdm_source=~\"^($source|)$\" scopes alerts that carry a cdm_source label (HighErrorRate, AnomalyDetected) to the selected $source, while still showing alerts with no cdm_source label at all (VersionUpdated, InstanceDown, InstanceRestarted, the saturation alerts) regardless of which $source is selected, since they have no source to filter by. Not a hardcoded alertname list: any alert whose series carries a cdm_service label matches. Queries ALERTS directly with no sum by(...) wrapper: several alerts can legitimately fire more than once concurrently under the same alertname, distinguished only by a label an aggregation would otherwise discard (HighErrorRate by cdm_source, AnomalyDetected by anomaly_name, VersionUpdated by saafe_version_type/saafe_source) -- aggregating would silently sum those into one row with value 2+, breaking the \"1\" -> \"firing\" mapping and hiding that two independent things are happening. Unaggregated, every concurrent instance gets its own row and is always exactly 1.",
       "datasource": {
         "type": "prometheus",
         "uid": "webstore-metrics"
@@ -1063,7 +1063,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{service=\"$service\", cdm_source=~\"^($source|)$\", saafe_severity=\"info\", alertstate=\"firing\"}",
+          "expr": "ALERTS{cdm_service=\"$service\", cdm_source=~\"^($source|)$\", saafe_severity=\"info\", alertstate=\"firing\"}",
           "legendFormat": "{{alertname}}",
           "range": true,
           "instant": false,
@@ -1075,7 +1075,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{service=\"$service\", cdm_source=~\"^($source|)$\", saafe_severity=\"warning\", alertstate=\"firing\"}",
+          "expr": "ALERTS{cdm_service=\"$service\", cdm_source=~\"^($source|)$\", saafe_severity=\"warning\", alertstate=\"firing\"}",
           "legendFormat": "{{alertname}}",
           "range": true,
           "instant": false,
@@ -1087,7 +1087,7 @@
             "uid": "webstore-metrics"
           },
           "editorMode": "code",
-          "expr": "ALERTS{service=\"$service\", cdm_source=~\"^($source|)$\", saafe_severity=\"critical\", alertstate=\"firing\"}",
+          "expr": "ALERTS{cdm_service=\"$service\", cdm_source=~\"^($source|)$\", saafe_severity=\"critical\", alertstate=\"firing\"}",
           "legendFormat": "{{alertname}}",
           "range": true,
           "instant": false,
@@ -1106,9 +1106,9 @@
           "type": "prometheus",
           "uid": "webstore-metrics"
         },
-        "definition": "label_values({cdm_metric=\"requests_total\"}, service)",
+        "definition": "label_values({cdm_metric=\"requests_total\"}, cdm_service)",
         "query": {
-          "query": "label_values({cdm_metric=\"requests_total\"}, service)",
+          "query": "label_values({cdm_metric=\"requests_total\"}, cdm_service)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "includeAll": false,
@@ -1130,9 +1130,9 @@
           "type": "prometheus",
           "uid": "webstore-metrics"
         },
-        "definition": "label_values({cdm_metric=\"requests_total\", service=~\"$service\", cdm_direction=\"inbound\"}, cdm_request_context)",
+        "definition": "label_values({cdm_metric=\"requests_total\", cdm_service=~\"$service\", cdm_direction=\"inbound\"}, cdm_request_context)",
         "query": {
-          "query": "label_values({cdm_metric=\"requests_total\", service=~\"$service\", cdm_direction=\"inbound\"}, cdm_request_context)",
+          "query": "label_values({cdm_metric=\"requests_total\", cdm_service=~\"$service\", cdm_direction=\"inbound\"}, cdm_request_context)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "includeAll": true,
@@ -1159,9 +1159,9 @@
           "type": "prometheus",
           "uid": "webstore-metrics"
         },
-        "definition": "label_values({cdm_source=~\".+\", service=\"$service\"}, cdm_source)",
+        "definition": "label_values({cdm_source=~\".+\", cdm_service=\"$service\"}, cdm_source)",
         "query": {
-          "query": "label_values({cdm_source=~\".+\", service=\"$service\"}, cdm_source)",
+          "query": "label_values({cdm_source=~\".+\", cdm_service=\"$service\"}, cdm_source)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "includeAll": false,

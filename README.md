@@ -78,7 +78,7 @@ carries the canonical identity instead.
 |---|---|---|
 | `cdm_metric` | `requests_total`, `request_duration` | The canonical identity to query by, in place of a renamed metric name. See "Enrichment, not a rename" above. |
 | `cdm_source` | `spanmetrics`, `otel_semconv`, `envoy`, `grafana`, `prometheus` | Which source type produced this series — one value per relabeling section in `prometheus-config.yaml`. |
-| `service` | free text | The entity this series is about. Renamed from whatever the source calls it (`service_name` for spanmetrics, a static value derived from `instance` for Envoy/Grafana). |
+| `cdm_service` | free text | The entity this series is about. Renamed from whatever the source calls it (`service_name` for spanmetrics, a static value derived from `instance` for Envoy/Grafana). |
 | `cdm_request_type` | `http`, `rpc`, `db`, `internal` | *What kind* of request. Derived from *which* semantic-convention attribute is present on the source, not from a fixed source-specific value — this is what lets the same query work across HTTP, gRPC and future sources without listing them all. |
 | `cdm_request_context` | free text | *Which* request/operation — an HTTP route, an RPC method, a DB operation, falling back to whatever the source's own operation identifier is (e.g. a span name) when nothing more specific exists. |
 | `cdm_direction` | `inbound`, `outbound` | Which side of a call this series represents, from OTel's `span.kind` (SERVER/CONSUMER vs. CLIENT/PRODUCER) or the source's equivalent. Without this, summing a service's inbound and outbound calls together double-counts the same logical request from both ends. |
@@ -96,17 +96,17 @@ A few representative queries against the live demo (see Quick start):
 
 ```promql
 # Request rate for checkoutservice's inbound calls, across every source that reports them
-sum by (cdm_source) (rate({cdm_metric="requests_total", service="checkoutservice", cdm_direction="inbound"}[5m]))
+sum by (cdm_source) (rate({cdm_metric="requests_total", cdm_service="checkoutservice", cdm_direction="inbound"}[5m]))
 
 # Error ratio, grouped by source to avoid double-counting the same call reported twice
 # (see "Lessons learned" below)
-sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
+sum by (cdm_service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
 /
-sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
+sum by (cdm_service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
 
 # p95 latency, accounting for cdm_unit explicitly rather than mixing differently-scaled
 # buckets into one histogram_quantile() call
-histogram_quantile(0.95, sum by (le) (rate({cdm_metric="request_duration", le=~".+", cdm_unit="ms", service="checkoutservice"}[5m]))) / 1000
+histogram_quantile(0.95, sum by (le) (rate({cdm_metric="request_duration", le=~".+", cdm_unit="ms", cdm_service="checkoutservice"}[5m]))) / 1000
 ```
 
 ## Lessons learned
