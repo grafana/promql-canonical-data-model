@@ -25,7 +25,7 @@ scrape_configs:
     - 'frontendproxy:10000'
     labels:
       # Match Envoy's OTel service_name, independently of its Docker hostname.
-      service: frontend-proxy
+      cdm_service: frontend-proxy
   metric_relabel_configs:
   # cdm_source: which section produced this series.
   - target_label: cdm_source
@@ -73,7 +73,7 @@ scrape_configs:
   metric_relabel_configs:
   - source_labels: [instance]
     regex: '([^:]+):.*'
-    target_label: service
+    target_label: cdm_service
     replacement: '${1}'
   - target_label: cdm_source
     replacement: grafana
@@ -113,7 +113,7 @@ scrape_configs:
   metric_relabel_configs:
   - source_labels: [instance]
     regex: '([^:]+):.*'
-    target_label: service
+    target_label: cdm_service
     replacement: '${1}'
   - target_label: cdm_source
     replacement: prometheus
@@ -160,14 +160,14 @@ scrape_configs:
 receive_relabel_configs:
 - source_labels: [service_name]
   regex: '(.+)'
-  target_label: service
+  target_label: cdm_service
   replacement: '${1}'
 # Prometheus folds service.name/service.namespace into `job` for every OTLP
 # resource series, target_info included -- there's no separate service_name label
-# to key off here, so service comes from `job` instead.
+# to key off here, so cdm_service comes from `job` instead.
 - source_labels: [__name__, job]
   regex: '(?:traces_)?target_info;(?:[^/]+/)?([^/]+)'
-  target_label: service
+  target_label: cdm_service
   replacement: '${1}'
 - source_labels: [service_name]
   regex: '.+'
@@ -242,7 +242,7 @@ receive_relabel_configs:
 # collision to rename it to `exported_job`. The namespace prefix is optional.
 - source_labels: [service_name, rpc_system, job]
   regex: ';.+;(?:[^/]+/)?([^/]+)'
-  target_label: service
+  target_label: cdm_service
   replacement: '${1}'
 - source_labels: [service_name, rpc_system]
   regex: ';.+'

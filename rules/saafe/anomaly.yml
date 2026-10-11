@@ -25,7 +25,7 @@ groups:
       ######################################################################################
 
     - record: anomaly:request:rate5m
-      expr: sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
+      expr: sum by (cdm_service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
       labels:
         anomaly_name: "canonical_requests"
         anomaly_type: "requests"
@@ -33,9 +33,9 @@ groups:
 
     - record: anomaly:request:error_ratio
       expr: |-
-        sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
+        sum by (cdm_service, cdm_source) (rate({cdm_metric="requests_total", cdm_status="error", cdm_direction="inbound"}[5m]))
         /
-        sum by (service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
+        sum by (cdm_service, cdm_source) (rate({cdm_metric="requests_total", cdm_direction="inbound"}[5m]))
       labels:
         anomaly_name: "canonical_error_ratio"
         anomaly_type: "errors"
@@ -47,9 +47,9 @@ groups:
       # grouping by `le` alone across mixed cdm_unit values would silently produce
       # a nonsense quantile.
       expr: |-
-        (histogram_quantile(0.95, sum by (service, cdm_source, le) (rate({cdm_metric="request_duration", cdm_direction="inbound", le=~".+", cdm_unit="ms"}[5m]))) / 1000)
+        (histogram_quantile(0.95, sum by (cdm_service, cdm_source, le) (rate({cdm_metric="request_duration", cdm_direction="inbound", le=~".+", cdm_unit="ms"}[5m]))) / 1000)
         or
-        (histogram_quantile(0.95, sum by (service, cdm_source, le) (rate({cdm_metric="request_duration", cdm_direction="inbound", le=~".+", cdm_unit="s"}[5m]))))
+        (histogram_quantile(0.95, sum by (cdm_service, cdm_source, le) (rate({cdm_metric="request_duration", cdm_direction="inbound", le=~".+", cdm_unit="s"}[5m]))))
       labels:
         anomaly_name: "canonical_latency_p95"
         anomaly_type: "latency"
